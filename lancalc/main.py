@@ -258,8 +258,8 @@ def validate_prefix(prefix_str: str) -> int:
 
     try:
         p = int(prefix_str)
-    except ValueError:
-        raise ValueError(f"Invalid prefix format: {prefix_str}")
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid prefix: {prefix_str}") from exc
 
     if not 0 <= p <= 32:
         raise ValueError(f"Prefix must be between 0 and 32, got: {p}")
