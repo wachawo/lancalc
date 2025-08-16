@@ -1,9 +1,12 @@
 # LanCalc
 
+[![CI](https://github.com/wachawo/lancalc/actions/workflows/ci.yml/badge.svg)](https://github.com/wachawo/lancalc/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/lancalc.svg)](https://pypi.org/project/lancalc/)
+[![Python](https://img.shields.io/pypi/pyversions/lancalc.svg)](https://pypi.org/project/lancalc/)
+
 LanCalc is a desktop application built with PyQt5, designed to calculate network configurations for Windows, macOS, and Linux systems.
 
 ![image](https://github.com/user-attachments/assets/be7655cc-9348-4d7c-bb25-a650e00cc422)
-
 
 [Download](https://github.com/lancalc/lancalc/releases)
 
