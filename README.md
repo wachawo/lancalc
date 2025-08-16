@@ -1,6 +1,6 @@
 # LanCalc
 
-[![CI](https://github.com/wachawo/lancalc/actions/workflows/ci.yml/badge.svg)](https://github.com/wachawo/lancalc/actions/workflows/ci.yml)
+[![CI](https://github.com/lancalc/lancalc/actions/workflows/ci.yml/badge.svg)](https://github.com/lancalc/lancalc/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/lancalc.svg)](https://pypi.org/project/lancalc/)
 [![Python](https://img.shields.io/pypi/pyversions/lancalc.svg)](https://pypi.org/project/lancalc/)
 
