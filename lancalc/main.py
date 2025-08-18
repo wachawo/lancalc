@@ -58,6 +58,8 @@ except Exception:
     except Exception:
         VERSION = "0.0.0"
 
+REPO_URL = "https://github.com/lancalc/lancalc"
+
 
 def get_ip() -> str:
     """Return the primary local IPv4 address without external libs."""
@@ -267,6 +269,47 @@ def validate_prefix(prefix_str: str) -> int:
     return p
 
 
+def classify_ipv4_range(network: ipaddress.IPv4Network) -> str:
+    """
+    Classify IPv4 network range and return message for special ranges.
+
+    Args:
+        network: IPv4Network object to classify
+
+    Returns:
+        Message string for special ranges, empty string for unicast
+
+    Special ranges:
+        - loopback: Loopback address (127.0.0.0/8) → "Loopback - RFC3330"
+        - link_local: Link-local address (169.254.0.0/16) → "Link-local - RFC3927"
+        - multicast: Multicast address (224.0.0.0/4) → "Multicast - RFC5771"
+        - unspecified: Unspecified address (0.0.0.0/8 but not 0.0.0.0/0) → "Unspecified - RFC1122"
+        - broadcast: Limited broadcast (255.255.255.255/32) → "Broadcast - RFC919"
+    """
+    # Get the network address for classification
+    net_addr = network.network_address
+
+    # Check for specific special ranges
+    if net_addr in ipaddress.IPv4Network('127.0.0.0/8'):
+        return f'RFC 3330 Loopback ({REPO_URL}/blob/main/docs/RFC.md#rfc-3330---loopback-addresses)'
+    elif net_addr in ipaddress.IPv4Network('169.254.0.0/16'):
+        return f'RFC 3927 Link-local ({REPO_URL}/blob/main/docs/RFC.md#rfc-3927---link-local-addresses)'
+    elif net_addr in ipaddress.IPv4Network('224.0.0.0/4'):
+        return f'RFC 5771 Multicast ({REPO_URL}/blob/main/docs/RFC.md#rfc-5771---multicast-addresses)'
+    elif net_addr in ipaddress.IPv4Network('0.0.0.0/8') and network.prefixlen > 0:
+        # Only classify as unspecified if it's not the default route (0.0.0.0/0)
+        return f'RFC 1122 Unspecified ({REPO_URL}/blob/main/docs/RFC.md#rfc-1122---unspecified-addresses)'
+    elif network.network_address == ipaddress.IPv4Address('255.255.255.255'):
+        return f'RFC 919 Broadcast ({REPO_URL}/blob/main/docs/RFC.md#rfc-919---broadcast-address)'
+    else:
+        return ''
+
+
+def is_special_range(message: str) -> bool:
+    """Check if the message indicates a special range."""
+    return bool(message.strip())
+
+
 def compute(ip: str, prefix: int) -> dict:
     """
     Core network computation function.
@@ -280,10 +323,11 @@ def compute(ip: str, prefix: int) -> dict:
         - Network: network address
         - Prefix: CIDR prefix with slash
         - Netmask: subnet mask
-        - Broadcast: broadcast address
-        - Hostmin: first usable host
-        - Hostmax: last usable host
-        - Hosts: number of usable hosts
+        - Broadcast: broadcast address (or "*" for special ranges)
+        - Hostmin: first usable host (or "*" for special ranges)
+        - Hostmax: last usable host (or "*" for special ranges)
+        - Hosts: number of usable hosts (or "*" for special ranges)
+        - message: message for special ranges (empty for unicast)
 
     Raises:
         ValueError: if IP or prefix is invalid
@@ -296,24 +340,55 @@ def compute(ip: str, prefix: int) -> dict:
     net = ipaddress.IPv4Network(f"{ip}/{prefix}", strict=False)
     total = net.num_addresses
 
+    # Classify the range
+    message = classify_ipv4_range(net)
+    is_special = is_special_range(message)
+
     # Calculate host range
-    if total > 2:
+    if is_special:
+        # For special ranges, handle differently based on type
+        if net.network_address in ipaddress.IPv4Network('127.0.0.0/8'):
+            # Loopback: calculate actual host range for the subnet
+            if total > 2:
+                hostmin = ipaddress.IPv4Address(int(net.network_address) + 1)
+                hostmax = ipaddress.IPv4Address(int(net.broadcast_address) - 1)
+                hostmin_str = str(hostmin)
+                hostmax_str = str(hostmax)
+                hosts_str = str(total - 2)
+            else:
+                hostmin_str = str(net.network_address)
+                hostmax_str = str(net.broadcast_address)
+                hosts_str = str(total)
+            broadcast_str = "*"
+        else:
+            # For other special ranges, mark host addresses as "*"
+            hostmin_str = "*"
+            hostmax_str = "*"
+            hosts_str = "*"
+            broadcast_str = "*"
+    elif total > 2:
         hostmin = ipaddress.IPv4Address(int(net.network_address) + 1)
         hostmax = ipaddress.IPv4Address(int(net.broadcast_address) - 1)
+        hostmin_str = str(hostmin)
+        hostmax_str = str(hostmax)
         hosts_str = str(total - 2)
+        broadcast_str = str(net.broadcast_address)
     else:
-        hostmin = net.network_address
-        hostmax = net.broadcast_address
+        hostmin_str = str(net.network_address)
+        hostmax_str = str(net.broadcast_address)
         hosts_str = f"{total}*"
+        broadcast_str = str(net.broadcast_address)
 
     return {
-        "Network": str(net.network_address),
-        "Prefix": f"/{prefix}",
-        "Netmask": str(net.netmask),
-        "Broadcast": str(net.broadcast_address),
-        "Hostmin": str(hostmin),
-        "Hostmax": str(hostmax),
-        "Hosts": hosts_str,
+        "network": str(net.network_address),
+        "prefix": f"/{prefix}",
+        "netmask": str(net.netmask),
+        "broadcast": broadcast_str,
+        "hostmin": hostmin_str,
+        "hostmax": hostmax_str,
+        "hosts": hosts_str,
+        "comment": message,
+        "type": "info"
     }
 
 
@@ -413,13 +488,22 @@ def calc_network(ip_cidr: str) -> dict:
 
 def print_result_stdout(res: dict) -> None:
     """Print only the result (stdout), without extra logs."""
-    for k in ("Network", "Prefix", "Netmask", "Broadcast", "Hostmin", "Hostmax", "Hosts"):
-        print(f"{k}: {res[k]}")
+    for k in ("network", "prefix", "netmask", "broadcast", "hostmin", "hostmax", "hosts"):
+        print(f"{k.capitalize()}: {res[k]}")
+
+    # Print comment if present for special ranges
+    if res.get("comment"):
+        print(f"Comment: {res['comment']}")
 
 
 def print_result_json(res: dict) -> None:
     """Print result as valid JSON to stdout."""
-    print(json.dumps(res))
+    # Filter out type and empty comment fields for cleaner JSON output
+    filtered_res = res.copy()
+    if filtered_res.get("comment") == "":
+        filtered_res.pop("comment", None)
+    filtered_res.pop("type", None)
+    print(json.dumps(filtered_res))
 
 
 def is_headless_linux() -> bool:
@@ -535,14 +619,15 @@ if GUI_AVAILABLE:
                 self.add_output_field(main_layout, "Hostmax", self.hostmax_output)
                 self.add_output_field(main_layout, "Hosts", self.hosts_output)
 
-                self.link_label = QLabel(f'<a href="https://github.com/lancalc/lancalc">LanCalc {VERSION}</a>')
-                self.link_label.setOpenExternalLinks(True)
-                self.link_label.setAlignment(Qt.AlignCenter)
-                link_font = QFont('Ubuntu', 11)  # 11
-                if not link_font.exactMatch():
-                    link_font = QFont('Arial', 11)
-                self.link_label.setFont(link_font)
-                main_layout.addWidget(self.link_label)
+                # Status bar at bottom - shows version or special range message
+                self.status_label = QLabel(f'<a href="{REPO_URL}">LanCalc {VERSION}</a>')
+                self.status_label.setOpenExternalLinks(True)
+                self.status_label.setAlignment(Qt.AlignCenter)
+                status_font = QFont('Ubuntu', 11)  # 11
+                if not status_font.exactMatch():
+                    status_font = QFont('Arial', 11)
+                self.status_label.setFont(status_font)
+                main_layout.addWidget(self.status_label)
 
                 self.setLayout(main_layout)
             except Exception as e:
@@ -584,7 +669,9 @@ if GUI_AVAILABLE:
                 else:
                     self.ip_input.setStyleSheet("color: red;")
             except Exception as e:
-                logging.error(f"Error applying CIDR from IP input: {type(e).__name__} {str(e)}\n{traceback.format_exc()}")
+                logging.error(
+                    f"Error applying CIDR from IP input: {type(e).__name__} {str(e)}\n{traceback.format_exc()}"
+                )
                 self.ip_input.setStyleSheet("color: red;")
 
         def eventFilter(self, obj, event):
@@ -601,7 +688,9 @@ if GUI_AVAILABLE:
                             return False
                 return super().eventFilter(obj, event)
             except Exception as e:
-                logger.error(f"Error in event filter: {type(e).__name__} {str(e)}\n{traceback.format_exc()}")
+                logger.error(
+                    f"Error in event filter: {type(e).__name__} {str(e)}\n{traceback.format_exc()}"
+                )
                 return super().eventFilter(obj, event)
 
         def validate_ip_address(self, ip_str: str) -> bool:
@@ -609,7 +698,9 @@ if GUI_AVAILABLE:
                 validate_ip(ip_str)
                 return True
             except ValueError as e:
-                logger.warning(f"Invalid IP address format: {ip_str} - {type(e).__name__} {str(e)}\n{traceback.format_exc()}")
+                logger.warning(
+                    f"Invalid IP address format: {ip_str} - {type(e).__name__} {str(e)}\n{traceback.format_exc()}"
+                )
                 return False
 
         def validate_cidr(self, cidr_str: str) -> bool:
@@ -617,7 +708,9 @@ if GUI_AVAILABLE:
                 validate_prefix(cidr_str)
                 return True
             except ValueError as e:
-                logger.warning(f"Invalid CIDR format: {cidr_str} - {type(e).__name__} {str(e)}\n{traceback.format_exc()}")
+                logger.warning(
+                    f"Invalid CIDR format: {cidr_str} - {type(e).__name__} {str(e)}\n{traceback.format_exc()}"
+                )
                 return False
 
         def check_clipboard(self):
@@ -646,7 +739,9 @@ if GUI_AVAILABLE:
                     else:
                         logger.warning(f"Invalid IP address in clipboard: {ip_address}")
             except Exception as e:
-                logger.error(f"Error checking clipboard: {type(e).__name__} {str(e)}\n{traceback.format_exc()}")
+                logger.error(
+                    f"Error checking clipboard: {type(e).__name__} {str(e)}\n{traceback.format_exc()}"
+                )
 
         def set_default_values(self):
             try:
@@ -673,7 +768,9 @@ if GUI_AVAILABLE:
                 else:
                     logger.warning(f"Invalid default IP address: {default_ip}")
             except Exception as e:
-                logger.warning(f"Could not determine default network settings: {type(e).__name__} {str(e)}\n{traceback.format_exc()}")
+                logger.warning(
+                    f"Could not determine default network settings: {type(e).__name__} {str(e)}\n{traceback.format_exc()}"
+                )
 
         def add_output_field(self, layout, label_text, line_edit):
             try:
@@ -688,7 +785,9 @@ if GUI_AVAILABLE:
                 field_layout.addWidget(line_edit)
                 layout.addLayout(field_layout)
             except Exception as e:
-                logger.error(f"Failed to add output field '{label_text}': {type(e).__name__} {str(e)}\n{traceback.format_exc()}")
+                logger.error(
+                    f"Failed to add output field '{label_text}': {type(e).__name__} {str(e)}\n{traceback.format_exc()}"
+                )
 
         def calculate_network(self, *args, **kwargs):
             try:
@@ -705,16 +804,51 @@ if GUI_AVAILABLE:
                 # Use core calculation module
                 result = compute(ip_addr, int(prefix))
 
-                self.network_output.setText(result["Network"])
-                self.broadcast_output.setText(result["Broadcast"])
-                self.prefix_output.setText(result["Prefix"])
+                self.network_output.setText(result["network"])
+                self.broadcast_output.setText(result["broadcast"])
+                self.prefix_output.setText(result["prefix"])
                 self.netmask_output.setText(netmask)
-                self.hostmin_output.setText(result["Hostmin"])
-                self.hostmax_output.setText(result["Hostmax"])
-                self.hosts_output.setText(result["Hosts"])
+                self.hostmin_output.setText(result["hostmin"])
+                self.hostmax_output.setText(result["hostmax"])
+                self.hosts_output.setText(result["hosts"])
+
+                # Handle special range comments in status bar
+                comment = result.get("comment", "")
+
+                if comment:
+                    # Show comment for special ranges with GitHub link
+                    # Extract the URL from the comment
+                    if '(' in comment and ')' in comment:
+                        url_start = comment.find('(')
+                        url_end = comment.find(')')
+                        if url_start != -1 and url_end != -1:
+                            url = comment[url_start + 1:url_end]
+                            display_text = comment[:url_start].strip() + ' (GitHub)'
+                            # Special networks are informational, not warnings
+                            self.status_label.setText(f'<a href="{url}">{display_text}</a>')
+                            self.status_label.setOpenExternalLinks(True)
+                        else:
+                            self.status_label.setText(f'<span>{comment}</span>')
+                            self.status_label.setOpenExternalLinks(False)
+                    else:
+                        self.status_label.setText(f'<span>{comment}</span>')
+                        self.status_label.setOpenExternalLinks(False)
+                else:
+                    # Show version link for normal unicast ranges
+                    self.status_label.setText(f'<a href="{REPO_URL}">LanCalc {VERSION}</a>')
+                    self.status_label.setOpenExternalLinks(True)
+
                 self.ip_input.setStyleSheet("color: black;")
+            except ValueError as e:
+                # Handle validation errors - show error in status bar with red color
+                self.status_label.setText('<span style="color: red;">Wrong Address</span>')
+                self.status_label.setOpenExternalLinks(False)
+                self.ip_input.setStyleSheet("color: red;")
+                logger.warning(f"Validation error: {str(e)}")
             except Exception as e:
-                logger.error(f"Unexpected error in network calculation: {type(e).__name__} {str(e)}\n{traceback.format_exc()}")
+                logger.error(
+                    f"Unexpected error in network calculation: {type(e).__name__} {str(e)}\n{traceback.format_exc()}"
+                )
                 self.ip_input.setStyleSheet("color: red;")
 
         def keyPressEvent(self, event: QKeyEvent):
