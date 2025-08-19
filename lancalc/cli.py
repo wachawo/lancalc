@@ -139,18 +139,19 @@ def main(argv: typing.Optional[list] = None) -> int:
     Main CLI entry point.
 
     Args:
-        argv: Command line arguments (uses sys.argv if None)
+        argv: Command line arguments (uses sys.argv[1:] if None)
 
     Returns:
         Exit code (0 for success, 1 for error)
     """
     if argv is None:
-        argv = sys.argv
+        # Exclude program name when parsing args
+        argv = sys.argv[1:]
 
     parser = argparse.ArgumentParser(
         prog="lancalc",
         description="LanCalc: IPv4 subnet calculator",
-        epilog="Examples:\n  --help 192.168.1.1/24\n  --help 10.0.0.1/8 --json\n  --help --help",
+        epilog="Examples:\n  lancalc 192.168.1.1/24\n  lancalc 10.0.0.1/8 --json\n  lancalc --external",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument(

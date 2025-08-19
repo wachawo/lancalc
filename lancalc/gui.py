@@ -442,7 +442,7 @@ class LanCalcGUI(QWidget):
             self.status_label.setText("Calculation Error")
 
 
-def run_gui() -> int:
+def main() -> int:
     """
     Run GUI mode.
 
@@ -463,11 +463,6 @@ def run_gui() -> int:
             f"GUI failed: {type(e).__name__} {str(e)}\n{traceback.format_exc()}"
         )
         return 1
-
-
-def main() -> int:
-    """Alias for run_gui for backward compatibility."""
-    return run_gui()
 
 
 if __name__ == "__main__":

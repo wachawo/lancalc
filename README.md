@@ -184,6 +184,11 @@ pip3 install -r requirements.txt
 pip3 install pytest pytest-qt pre-commit flake8
 ```
 
+- Reinstall 
+```bash
+pip3 install -e . --force-reinstall
+```
+
 ### Installation for Development
 
 Clone the repository and install in development mode:

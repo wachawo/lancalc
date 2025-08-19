@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 try:
     from . import __version__ as VERSION
-    from . import cli, gui
+    from . import cli
+    from . import gui
 except ImportError:
     try:
         from lancalc import __version__ as VERSION
@@ -125,7 +126,7 @@ def main(argv: typing.Optional[list] = None) -> int:
 
     if mode == 'gui':
         try:
-            return gui.run_gui()
+            return gui.main()
         except Exception as e:
             logger.error(f"GUI failed: {type(e).__name__} {str(e)}")
             # Fallback to CLI help

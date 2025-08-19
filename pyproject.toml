@@ -42,7 +42,7 @@ nogui = [
 ]
 
 [project.scripts]
-lancalc = "lancalc:main"
+lancalc = "lancalc.main:main"
 
 [project.urls]
 Homepage = "https://github.com/lancalc/lancalc"

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import sys
-from .main import main
+from . import main
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main.main())
