@@ -317,12 +317,7 @@ class LanCalcGUI(QWidget):
             # Valid IP - clear any previous errors
             self.ip_input.setStyleSheet("")
             # Update status to version if no special range
-            try:
-                import lancalc
-                version = lancalc.__version__
-            except Exception:
-                version = "0.0.0"
-            self.status_label.setText(f'<a href="{core.REPO_URL}">LanCalc {version}</a>')
+            self.status_label.setText(f'<a href="{core.REPO_URL}">LanCalc {VERSION}</a>')
             self.status_label.setStyleSheet("")
         except Exception:
             # Invalid IP - show error
@@ -333,13 +328,7 @@ class LanCalcGUI(QWidget):
     def clear_validation(self):
         """Clear validation styling when focus is gained."""
         self.ip_input.setStyleSheet("")
-        # Update status to version
-        try:
-            import lancalc
-            version = lancalc.__version__
-        except Exception:
-            version = "0.0.0"
-        self.status_label.setText(f'<a href="{core.REPO_URL}">LanCalc {version}</a>')
+        self.status_label.setText(f'<a href="{core.REPO_URL}">LanCalc {VERSION}</a>')
         self.status_label.setStyleSheet("")
 
     def check_clipboard(self):
