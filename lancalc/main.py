@@ -1,515 +1,49 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-LanCalc — GUI + CLI.
-
-Changes:
-- CLI via argparse: `lancalc 192.168.88.2/24` prints the result to stdout.
-- If no argument is provided and GUI is unavailable (Linux without DISPLAY) — print a notification to stdout and exit with code 2.
-- --help from argparse.
-- Logging to stderr (logging), computed answer — to stdout.
-- GUI starts if no argument is provided and GUI is available.
+Main entry point for LanCalc - adaptive launcher.
 """
-import argparse
-import json
-import ipaddress
 import logging
-import traceback
 import os
-import platform
-import re
-import socket
-import subprocess
 import sys
+import traceback
+import typing
 
+# Configure logging
 logging.basicConfig(
-    handlers=[
-        logging.StreamHandler(sys.stderr)
-    ],
+    handlers=[logging.StreamHandler(sys.stderr)],
     level=logging.WARNING,
     format='%(asctime)s.%(msecs)03d [%(levelname)s]: (%(name)s.%(funcName)s) - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
 
-
-# Try to import Qt — not required for CLI
-try:
-    from PyQt5.QtWidgets import (
-        QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox
-    )
-    from PyQt5.QtCore import Qt
-    from PyQt5.QtCore import QEvent
-    from PyQt5.QtGui import QFont, QKeyEvent
-    GUI_AVAILABLE = True
-except Exception as e:
-    logger.error(f"{type(e).__name__} {str(e)}\n{traceback.format_exc()}")
-    GUI_AVAILABLE = False
-
-# Import version — support running as package/as script
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 try:
-    from . import __version__
-    VERSION = __version__
-except Exception:
+    from . import __version__ as VERSION
+    from . import cli, gui
+except ImportError:
     try:
-        import lancalc
-        VERSION = lancalc.__version__
-    except Exception:
+        from lancalc import __version__ as VERSION
+        import cli
+        import gui
+    except Exception as e:
+        logger.warning(f"{type(e).__name__} {str(e)}\n{traceback.format_exc()}")
         VERSION = "0.0.0"
 
-REPO_URL = "https://github.com/lancalc/lancalc"
+logger.debug(f"LanCalc {VERSION} starting...")
 
 
-def get_ip() -> str:
-    """Return the primary local IPv4 address without external libs."""
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(("8.8.8.8", 80))
-        return s.getsockname()[0]
-    except Exception as e:
-        logger.error(f"{type(e).__name__} {str(e)}\n{traceback.format_exc()}")
-        # Fallback: hostname resolution (may return 127.0.0.1 in some setups)
-        try:
-            return socket.gethostbyname(socket.gethostname())
-        except Exception as e:
-            logger.error(f"{type(e).__name__} {str(e)}\n{traceback.format_exc()}")
-            return "127.0.0.1"
-    finally:
-        s.close()
-
-
-def cidr_from_netmask(mask: str) -> int:
-    try:
-        parts = [int(x) for x in mask.split('.')]
-        return sum(bin(p).count('1') for p in parts)
-    except Exception as e:
-        logger.error(f"{type(e).__name__} {str(e)}\n{traceback.format_exc()}")
-        return 24
-
-
-def get_cidr(ip: str) -> int:
-    """Best-effort CIDR detection using system tools; defaults to /24."""
-    system = platform.system()
-    try:
-        if system == "Windows":
-            return _get_cidr_windows(ip)
-        elif system == "Darwin":
-            return _get_cidr_macos(ip)
-        else:
-            return _get_cidr_linux(ip)
-    except Exception as e:
-        logger.error(f"{type(e).__name__} {str(e)}\n{traceback.format_exc()}")
-        return 24
-
-
-def _get_cidr_windows(ip: str) -> int:
-    """Get CIDR for Windows systems with improved locale support."""
-    try:
-        # Try PowerShell first for better locale support
-        try:
-            cmd = [
-                "powershell", "-Command",
-                f"Get-NetIPAddress -IPAddress '{ip}' | Select-Object -ExpandProperty PrefixLength"
-            ]
-            out = subprocess.check_output(cmd, encoding="utf-8", errors="ignore", timeout=5)
-            prefix = out.strip()
-            if prefix.isdigit():
-                return int(prefix)
-        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
-            pass
-
-        # Fallback to ipconfig with improved parsing
-        out = subprocess.check_output(["ipconfig"], encoding="utf-8", errors="ignore")
-        lines = out.splitlines()
-
-        # Find the interface with our IP
-        for i, line in enumerate(lines):
-            if ip in line and "IPv4" in line:
-                # Look for subnet mask in next few lines
-                for j in range(i, min(i + 10, len(lines))):
-                    line_lower = lines[j].lower()
-                    # FIXME: We need to find another way to detect
-                    mask_keywords = [
-                        "subnet mask", "маска подсети", "subnetmaske", "máscara de sub-rede",
-                        "masque de sous-réseau", "subnetmask", "netmask", "маска підмережі"
-                    ]
-                    if any(keyword in line_lower for keyword in mask_keywords):
-                        # Extract mask using multiple patterns
-                        mask_patterns = [
-                            r'[:=]\s*(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})',
-                            r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})',
-                        ]
-                        for pattern in mask_patterns:
-                            match = re.search(pattern, lines[j])
-                            if match:
-                                mask = match.group(1)
-                                return cidr_from_netmask(mask)
-        return 24
-    except Exception as e:
-        logger.error(f"{type(e).__name__} {str(e)}\n{traceback.format_exc()}")
-        return 24
-
-
-def _get_cidr_macos(ip: str) -> int:
-    """Get CIDR for macOS systems."""
-    try:
-        # Method 1: Use networksetup for better reliability
-        try:
-            # Get all network services
-            services_cmd = ["networksetup", "-listallnetworkservices"]
-            services_out = subprocess.check_output(services_cmd, encoding="utf-8", errors="ignore")
-
-            for service in services_out.splitlines()[1:]:  # Skip first line (header)
-                service = service.strip()
-                if not service:
-                    continue
-
-                # Get IP for this service
-                try:
-                    ip_cmd = ["networksetup", "-getinfo", service]
-                    ip_out = subprocess.check_output(ip_cmd, encoding="utf-8", errors="ignore")
-
-                    if ip in ip_out:
-                        # Extract subnet mask
-                        for line in ip_out.splitlines():
-                            if "Subnet mask:" in line:
-                                mask = line.split(":")[1].strip()
-                                return cidr_from_netmask(mask)
-                except subprocess.CalledProcessError:
-                    continue
-        except subprocess.CalledProcessError:
-            pass
-
-        # Method 2: Direct ifconfig parsing
-        out = subprocess.check_output(["ifconfig"], encoding="utf-8", errors="ignore")
-        for line in out.splitlines():
-            m = re.search(r"inet\s+(\d+\.\d+\.\d+\.\d+)\s+netmask\s+0x([0-9a-fA-F]+)", line)
-            if m and m.group(1) == ip:
-                netmask_hex = m.group(2)
-                netmask_int = int(netmask_hex, 16)
-                return bin(netmask_int).count('1')
-        return 24
-    except Exception as e:
-        logger.error(f"{type(e).__name__} {str(e)}\n{traceback.format_exc()}")
-        return 24
-
-
-def _get_cidr_linux(ip: str) -> int:
-    """Get CIDR for Linux systems."""
-    try:
-        # Try JSON output first for better parsing
-        try:
-            out = subprocess.check_output(["ip", "-json", "-4", "addr", "show"], encoding="utf-8", errors="ignore")
-            data = json.loads(out)
-            for iface in data:
-                for addr in iface.get("addr_info", []):
-                    if addr.get("local") == ip:
-                        return addr.get("prefixlen", 24)
-        except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError):
-            pass
-
-        # Fallback to text parsing
-        out = subprocess.check_output(["ip", "-o", "-4", "addr", "show"], encoding="utf-8", errors="ignore")
-        for line in out.splitlines():
-            m = re.search(r"inet\s+(\d+\.\d+\.\d+\.\d+)/(\d+)", line)
-            if m and m.group(1) == ip:
-                return int(m.group(2))
-        return 24
-    except Exception as e:
-        logger.error(f"{type(e).__name__} {str(e)}\n{traceback.format_exc()}")
-        return 24
-
-
-def validate_ip(ip_str: str) -> None:
-    """Validate IPv4 address format."""
-    if not ip_str or not ip_str.strip():
-        raise ValueError("IP address cannot be empty")
-
-    ip_str = ip_str.strip()
-
-    # Check basic format with regex first for better error messages
-    ip_pattern = r"^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$"
-    match = re.match(ip_pattern, ip_str)
-    if not match:
-        raise ValueError(f"Invalid IP address format. Expected format: x.x.x.x (e.g., 192.168.1.1), got: {ip_str}")
-
-    # Check each octet range
-    octets = [int(match.group(i)) for i in range(1, 5)]
-    for i, octet in enumerate(octets, 1):
-        if not 0 <= octet <= 255:
-            raise ValueError(f"Invalid octet {i}: {octet}. Each octet must be between 0 and 255")
-
-    # Final validation with ipaddress module
-    try:
-        ipaddress.IPv4Address(ip_str)
-    except ipaddress.AddressValueError as e:
-        raise ValueError(f"Invalid IP address: {ip_str}") from e
-
-
-def validate_prefix(prefix_str: str) -> int:
-    """Validate CIDR prefix and return as integer."""
-    if not prefix_str or not prefix_str.strip():
-        raise ValueError("Prefix cannot be empty")
-
-    prefix_str = prefix_str.strip()
-
-    # Check if it's a valid integer
-    if not prefix_str.isdigit():
-        raise ValueError(f"Prefix must be a number, got: {prefix_str}")
-
-    try:
-        p = int(prefix_str)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"Invalid prefix: {prefix_str}") from exc
-
-    if not 0 <= p <= 32:
-        raise ValueError(f"Prefix must be between 0 and 32, got: {p}")
-
-    return p
-
-
-def classify_ipv4_range(network: ipaddress.IPv4Network) -> str:
+def is_headless_environment() -> bool:
     """
-    Classify IPv4 network range and return message for special ranges.
-
-    Args:
-        network: IPv4Network object to classify
+    Check if running in headless environment (no GUI available).
 
     Returns:
-        Message string for special ranges, empty string for unicast
-
-    Special ranges:
-        - loopback: Loopback address (127.0.0.0/8) → "Loopback - RFC3330"
-        - link_local: Link-local address (169.254.0.0/16) → "Link-local - RFC3927"
-        - multicast: Multicast address (224.0.0.0/4) → "Multicast - RFC5771"
-        - unspecified: Unspecified address (0.0.0.0/8 but not 0.0.0.0/0) → "Unspecified - RFC1122"
-        - broadcast: Limited broadcast (255.255.255.255/32) → "Broadcast - RFC919"
+        True if headless, False if GUI is available
     """
-    # Get the network address for classification
-    net_addr = network.network_address
-
-    # Check for specific special ranges
-    if net_addr in ipaddress.IPv4Network('127.0.0.0/8'):
-        return f'RFC 3330 Loopback ({REPO_URL}/blob/main/docs/RFC.md#rfc-3330---loopback-addresses)'
-    elif net_addr in ipaddress.IPv4Network('169.254.0.0/16'):
-        return f'RFC 3927 Link-local ({REPO_URL}/blob/main/docs/RFC.md#rfc-3927---link-local-addresses)'
-    elif net_addr in ipaddress.IPv4Network('224.0.0.0/4'):
-        return f'RFC 5771 Multicast ({REPO_URL}/blob/main/docs/RFC.md#rfc-5771---multicast-addresses)'
-    elif net_addr in ipaddress.IPv4Network('0.0.0.0/8') and network.prefixlen > 0:
-        # Only classify as unspecified if it's not the default route (0.0.0.0/0)
-        return f'RFC 1122 Unspecified ({REPO_URL}/blob/main/docs/RFC.md#rfc-1122---unspecified-addresses)'
-    elif network.network_address == ipaddress.IPv4Address('255.255.255.255'):
-        return f'RFC 919 Broadcast ({REPO_URL}/blob/main/docs/RFC.md#rfc-919---broadcast-address)'
-    else:
-        return ''
-
-
-def is_special_range(message: str) -> bool:
-    """Check if the message indicates a special range."""
-    return bool(message.strip())
-
-
-def compute(ip: str, prefix: int) -> dict:
-    """
-    Core network computation function.
-
-    Args:
-        ip: IPv4 address as string
-        prefix: CIDR prefix as integer (0-32)
-
-    Returns:
-        Dictionary with network parameters:
-        - Network: network address
-        - Prefix: CIDR prefix with slash
-        - Netmask: subnet mask
-        - Broadcast: broadcast address (or "*" for special ranges)
-        - Hostmin: first usable host (or "*" for special ranges)
-        - Hostmax: last usable host (or "*" for special ranges)
-        - Hosts: number of usable hosts (or "*" for special ranges)
-        - message: message for special ranges (empty for unicast)
-
-    Raises:
-        ValueError: if IP or prefix is invalid
-    """
-    # Validate inputs
-    validate_ip(ip)
-    validate_prefix(str(prefix))
-
-    # Create network object
-    net = ipaddress.IPv4Network(f"{ip}/{prefix}", strict=False)
-    total = net.num_addresses
-
-    # Classify the range
-    message = classify_ipv4_range(net)
-    is_special = is_special_range(message)
-
-    # Calculate host range
-    if is_special:
-        # For special ranges, handle differently based on type
-        if net.network_address in ipaddress.IPv4Network('127.0.0.0/8'):
-            # Loopback: calculate actual host range for the subnet
-            if total > 2:
-                hostmin = ipaddress.IPv4Address(int(net.network_address) + 1)
-                hostmax = ipaddress.IPv4Address(int(net.broadcast_address) - 1)
-                hostmin_str = str(hostmin)
-                hostmax_str = str(hostmax)
-                hosts_str = str(total - 2)
-            else:
-                hostmin_str = str(net.network_address)
-                hostmax_str = str(net.broadcast_address)
-                hosts_str = str(total)
-            broadcast_str = "*"
-        else:
-            # For other special ranges, mark host addresses as "*"
-            hostmin_str = "*"
-            hostmax_str = "*"
-            hosts_str = "*"
-            broadcast_str = "*"
-    elif total > 2:
-        hostmin = ipaddress.IPv4Address(int(net.network_address) + 1)
-        hostmax = ipaddress.IPv4Address(int(net.broadcast_address) - 1)
-        hostmin_str = str(hostmin)
-        hostmax_str = str(hostmax)
-        hosts_str = str(total - 2)
-        broadcast_str = str(net.broadcast_address)
-    else:
-        hostmin_str = str(net.network_address)
-        hostmax_str = str(net.broadcast_address)
-        hosts_str = f"{total}*"
-        broadcast_str = str(net.broadcast_address)
-
-    return {
-        "network": str(net.network_address),
-        "prefix": f"/{prefix}",
-        "netmask": str(net.netmask),
-        "broadcast": broadcast_str,
-        "hostmin": hostmin_str,
-        "hostmax": hostmax_str,
-        "hosts": hosts_str,
-        "comment": message,
-        "type": "info"
-    }
-
-
-def validate_cidr_format(cidr_str: str) -> tuple[str, str]:
-    """
-    Validate CIDR format and provide detailed error messages.
-
-    Args:
-        cidr_str: CIDR notation string
-
-    Returns:
-        Tuple of (ip, prefix_str) if valid
-
-    Raises:
-        ValueError: with specific error message about what's wrong
-    """
-    if not cidr_str or not cidr_str.strip():
-        raise ValueError("Empty input. Please provide an address in CIDR format (e.g., 192.168.1.1/24)")
-
-    cidr_str = cidr_str.strip()
-
-    # Check if it contains the slash separator
-    if '/' not in cidr_str:
-        raise ValueError(f"Missing '/' separator. Expected format: IP/PREFIX (e.g., 192.168.1.1/24), got: {cidr_str}")
-
-    # Split into IP and prefix parts
-    parts = cidr_str.split('/')
-    if len(parts) != 2:
-        raise ValueError(f"Invalid format. Expected exactly one '/' separator, got: {cidr_str}")
-
-    ip_part, prefix_part = parts
-
-    # Validate IP part format
-    if not ip_part.strip():
-        raise ValueError("IP address part is empty. Expected format: IP/PREFIX (e.g., 192.168.1.1/24)")
-
-    if not prefix_part.strip():
-        raise ValueError("Prefix part is empty. Expected format: IP/PREFIX (e.g., 192.168.1.1/24)")
-
-    return ip_part.strip(), prefix_part.strip()
-
-
-def parse_cidr(cidr_str: str) -> tuple[str, int]:
-    """
-    Parse CIDR notation (e.g., "192.168.1.1/24") into IP and prefix.
-
-    Args:
-        cidr_str: CIDR notation string
-
-    Returns:
-        Tuple of (ip, prefix)
-
-    Raises:
-        ValueError: if CIDR format is invalid
-    """
-    # First validate the format and get parts
-    ip_part, prefix_part = validate_cidr_format(cidr_str)
-
-    # Validate IP address format
-    try:
-        validate_ip(ip_part)
-    except ValueError as e:
-        raise ValueError(f"Invalid IP address '{ip_part}': {str(e)}")
-
-    # Validate prefix
-    try:
-        prefix = validate_prefix(prefix_part)
-    except ValueError as e:
-        raise ValueError(f"Invalid prefix '{prefix_part}': {str(e)}")
-
-    return ip_part, prefix
-
-
-def compute_from_cidr(cidr_str: str) -> dict:
-    """
-    Compute network parameters from CIDR notation.
-
-    Args:
-        cidr_str: CIDR notation string (e.g., "192.168.1.1/24")
-
-    Returns:
-        Dictionary with network parameters
-
-    Raises:
-        ValueError: if CIDR format is invalid
-    """
-    ip, prefix = parse_cidr(cidr_str)
-    return compute(ip, prefix)
-
-
-def calc_network(ip_cidr: str) -> dict:
-    """Calculation of the network from a string like '192.168.88.254/24'. Returns a dict with fields.
-    Logs are written to stderr, the result is used for stdout/GUI.
-    """
-    return compute_from_cidr(ip_cidr)
-
-
-def print_result_stdout(res: dict) -> None:
-    """Print only the result (stdout), without extra logs."""
-    for k in ("network", "prefix", "netmask", "broadcast", "hostmin", "hostmax", "hosts"):
-        print(f"{k.capitalize()}: {res[k]}")
-
-    # Print comment if present for special ranges
-    if res.get("comment"):
-        print(f"Comment: {res['comment']}")
-
-
-def print_result_json(res: dict) -> None:
-    """Print result as valid JSON to stdout."""
-    # Filter out type and empty comment fields for cleaner JSON output
-    filtered_res = res.copy()
-    if filtered_res.get("comment") == "":
-        filtered_res.pop("comment", None)
-    filtered_res.pop("type", None)
-    print(json.dumps(filtered_res))
-
-
-def is_headless_linux() -> bool:
-    """Check if running in headless environment (no GUI available)."""
-    if not sys.platform.startswith('linux'):
-        return False
+    # Check for CI environment
+    if any(os.environ.get(var) == 'true' for var in ['CI', 'GITHUB_ACTIONS', 'TRAVIS']):
+        return True
 
     # Check for display environment variables
     display_vars = ['DISPLAY', 'WAYLAND_DISPLAY', 'QT_QPA_PLATFORM']
@@ -521,418 +55,84 @@ def is_headless_linux() -> bool:
     if os.environ.get('QT_QPA_PLATFORM') == 'offscreen':
         return True
 
+    # Platform-specific checks
+    if sys.platform.startswith('linux'):
+        # Linux: check for SSH connection or no display
+        if os.environ.get('SSH_CONNECTION'):
+            return True
+        return True  # Default to headless on Linux without display
+
+    elif sys.platform.startswith('darwin'):
+        # macOS: usually has GUI available
+        return False
+
+    elif sys.platform.startswith('win'):
+        # Windows: usually has GUI available
+        return False
+
+    # Default to headless for unknown platforms
     return True
 
 
-if GUI_AVAILABLE:
-    class ClickToCopyLineEdit(QLineEdit):
-        def mousePressEvent(self, event):
-            super().mousePressEvent(event)
-            self.selectAll()
-            QApplication.clipboard().setText(self.text())
+def detect_interface_mode() -> str:
+    """
+    Detect whether to use GUI or CLI mode based on environment.
 
-    class IpInputLineEdit(QLineEdit):
-        def focusInEvent(self, event):
-            self.setStyleSheet("color: black;")
-            super().focusInEvent(event)
+    Returns:
+        'gui' or 'cli'
+    """
+    # If arguments are provided, use CLI mode
+    if len(sys.argv) > 1:
+        return 'cli'
 
-    class LanCalc(QWidget):
-        def __init__(self):
-            super().__init__()
-            logger.info("Initializing LanCalc application")
-            self.init_ui()
-            self.check_clipboard()
-            logger.info("LanCalc application initialized successfully")
+    # Check if GUI is available
+    if not hasattr(gui, 'GUI_AVAILABLE') or not gui.GUI_AVAILABLE:
+        return 'cli'
 
-        def init_ui(self):
-            try:
-                main_layout = QVBoxLayout()
-                self.setWindowTitle('LanCalc')
-                input_width = 200
-                font = QFont('Ubuntu', 12)  # 12
-                # Fallback font if Ubuntu is not available
-                if not font.exactMatch():
-                    font = QFont('Arial', 12)
-                readonly_style = "QLineEdit { background-color: #f0f0f0; color: #333; text-align: right; }"
+    # Check if we're in a headless environment
+    if is_headless_environment():
+        return 'cli'
 
-                ip_layout = QHBoxLayout()
-                ip_label = QLabel("IP Address")
-                ip_label.setFont(font)
-                self.ip_input = IpInputLineEdit(self)
-                self.ip_input.setFont(font)
-                self.ip_input.setFixedWidth(input_width)
-                self.ip_input.setAlignment(Qt.AlignRight)
-                ip_layout.addWidget(ip_label)
-                ip_layout.addWidget(self.ip_input)
-                # Defer parsing "IP/prefix" until focus is lost or Enter/Tab is pressed
-                self.ip_input.installEventFilter(self)
-                main_layout.addLayout(ip_layout)
-
-                network_layout = QHBoxLayout()
-                network_label = QLabel("Subnet")
-                network_label.setFont(font)
-                self.network_selector = QComboBox(self)
-                self.network_selector.setFont(font)
-                for cidr in range(33):
-                    mask = str(ipaddress.IPv4Network(f'0.0.0.0/{cidr}', strict=False).netmask)
-                    self.network_selector.addItem(f'{cidr}/{mask}')
-                self.network_selector.setFixedWidth(input_width)
-                network_layout.addWidget(network_label)
-                network_layout.addWidget(self.network_selector)
-                main_layout.addLayout(network_layout)
-
-                self.set_default_values()
-
-                self.calc_button = QPushButton('Calculate', self)
-                self.calc_button.setFont(font)
-                self.calc_button.clicked.connect(self.calculate_network)
-                main_layout.addWidget(self.calc_button)
-
-                self.network_output = ClickToCopyLineEdit(self)
-                self.prefix_output = ClickToCopyLineEdit(self)
-                self.netmask_output = ClickToCopyLineEdit(self)
-                self.broadcast_output = ClickToCopyLineEdit(self)
-                self.hostmin_output = ClickToCopyLineEdit(self)
-                self.hostmax_output = ClickToCopyLineEdit(self)
-                self.hosts_output = ClickToCopyLineEdit(self)
-
-                for field in [
-                    self.network_output,
-                    self.prefix_output,
-                    self.netmask_output,
-                    self.broadcast_output,
-                    self.hostmin_output,
-                    self.hostmax_output,
-                    self.hosts_output,
-                ]:
-                    field.setReadOnly(True)
-                    field.setStyleSheet(readonly_style)
-                    field.setAlignment(Qt.AlignRight)
-                    field.setFont(font)
-                    field.setFixedWidth(input_width)
-
-                self.add_output_field(main_layout, "Network", self.network_output)
-                self.add_output_field(main_layout, "Prefix", self.prefix_output)
-                self.add_output_field(main_layout, "Netmask", self.netmask_output)
-                self.add_output_field(main_layout, "Broadcast", self.broadcast_output)
-                self.add_output_field(main_layout, "Hostmin", self.hostmin_output)
-                self.add_output_field(main_layout, "Hostmax", self.hostmax_output)
-                self.add_output_field(main_layout, "Hosts", self.hosts_output)
-
-                # Status bar at bottom - shows version or special range message
-                self.status_label = QLabel(f'<a href="{REPO_URL}">LanCalc {VERSION}</a>')
-                self.status_label.setOpenExternalLinks(True)
-                self.status_label.setAlignment(Qt.AlignCenter)
-                status_font = QFont('Ubuntu', 11)  # 11
-                if not status_font.exactMatch():
-                    status_font = QFont('Arial', 11)
-                self.status_label.setFont(status_font)
-                main_layout.addWidget(self.status_label)
-
-                self.setLayout(main_layout)
-            except Exception as e:
-                logging.error(f"Failed to initialize UI: {type(e).__name__} {str(e)}\n{traceback.format_exc()}")
-
-        def apply_cidr_from_text(self, text: str) -> None:
-            """Apply CIDR from the IP input when triggered (focus out or Enter/Tab).
-            Splits "IP/prefix" and updates selector when valid. Highlights red on invalid.
-            """
-            try:
-                t = (text or "").strip()
-                if not t:
-                    self.ip_input.setStyleSheet("color: black;")
-                    return
-                if "/" in t:
-                    m = re.match(r"^(\d{1,3}(?:\.\d{1,3}){3})(?:\/(\d{1,2}))?$", t)
-                    if not m:
-                        self.ip_input.setStyleSheet("color: red;")
-                        return
-                    ip_address, cidr = m.group(1), m.group(2)
-                    if not self.validate_ip_address(ip_address):
-                        self.ip_input.setStyleSheet("color: red;")
-                        return
-                    if cidr is not None and self.validate_cidr(cidr) and 0 <= int(cidr) < self.network_selector.count():
-                        try:
-                            self.ip_input.blockSignals(True)
-                            self.ip_input.setText(ip_address)
-                        finally:
-                            self.ip_input.blockSignals(False)
-                        self.network_selector.setCurrentIndex(int(cidr))
-                        self.ip_input.setStyleSheet("color: black;")
-                        return
-                    # CIDR invalid or not present in selector
-                    self.ip_input.setStyleSheet("color: red;")
-                    return
-                # No slash: validate full IP once on trigger
-                if self.validate_ip_address(t):
-                    self.ip_input.setStyleSheet("color: black;")
-                else:
-                    self.ip_input.setStyleSheet("color: red;")
-            except Exception as e:
-                logging.error(
-                    f"Error applying CIDR from IP input: {type(e).__name__} {str(e)}\n{traceback.format_exc()}"
-                )
-                self.ip_input.setStyleSheet("color: red;")
-
-        def eventFilter(self, obj, event):
-            try:
-                if obj is self.ip_input:
-                    if event.type() == QEvent.FocusOut:
-                        self.apply_cidr_from_text(self.ip_input.text())
-                        return False
-                    if event.type() == QEvent.KeyPress:
-                        key = event.key()
-                        if key in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Tab):
-                            self.apply_cidr_from_text(self.ip_input.text())
-                            # Do not consume; keep normal behavior (focus move, calculate on return, etc.)
-                            return False
-                return super().eventFilter(obj, event)
-            except Exception as e:
-                logger.error(
-                    f"Error in event filter: {type(e).__name__} {str(e)}\n{traceback.format_exc()}"
-                )
-                return super().eventFilter(obj, event)
-
-        def validate_ip_address(self, ip_str: str) -> bool:
-            try:
-                validate_ip(ip_str)
-                return True
-            except ValueError as e:
-                logger.warning(
-                    f"Invalid IP address format: {ip_str} - {type(e).__name__} {str(e)}\n{traceback.format_exc()}"
-                )
-                return False
-
-        def validate_cidr(self, cidr_str: str) -> bool:
-            try:
-                validate_prefix(cidr_str)
-                return True
-            except ValueError as e:
-                logger.warning(
-                    f"Invalid CIDR format: {cidr_str} - {type(e).__name__} {str(e)}\n{traceback.format_exc()}"
-                )
-                return False
-
-        def check_clipboard(self):
-            try:
-                # Only check clipboard if we have a fallback/localhost IP (interface detection failed)
-                current_ip = self.ip_input.text().strip()
-                if current_ip and current_ip not in ["127.0.0.1", "0.0.0.0"]:
-                    logger.debug(f"Interface detection successful ({current_ip}), skipping clipboard check")
-                    return
-
-                clipboard = QApplication.clipboard()
-                clipboard_text = clipboard.text()
-                logger.debug(f"Checking clipboard content: {clipboard_text}")
-                match = re.match(r'^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(/(\d{1,2}))?$', clipboard_text)
-                if match:
-                    ip_address = match.group(1)
-                    cidr = match.group(3)
-                    if self.validate_ip_address(ip_address):
-                        self.ip_input.setText(ip_address)
-                        logger.info(f"Auto-filled IP address from clipboard: {ip_address}")
-                        if cidr and self.validate_cidr(cidr):
-                            self.network_selector.setCurrentIndex(int(cidr))
-                            logger.info(f"Auto-filled CIDR from clipboard: {cidr}")
-                        else:
-                            logger.warning(f"Invalid CIDR in clipboard: {cidr}")
-                    else:
-                        logger.warning(f"Invalid IP address in clipboard: {ip_address}")
-            except Exception as e:
-                logger.error(
-                    f"Error checking clipboard: {type(e).__name__} {str(e)}\n{traceback.format_exc()}"
-                )
-
-        def set_default_values(self):
-            try:
-                system = platform.system()
-                if system == 'Linux':
-                    import netifaces
-                    gateways = netifaces.gateways()
-                    default_interface = gateways['default'][netifaces.AF_INET][1]
-                    addrs = netifaces.ifaddresses(default_interface)
-                    ip_info = addrs[netifaces.AF_INET][0]
-                    default_ip = ip_info['addr']
-                    netmask = ip_info['netmask']
-                    default_cidr = sum([bin(int(x)).count('1') for x in netmask.split('.')])
-                elif system == 'Windows' or system == 'Darwin':  # Windows and macOS
-                    default_ip = get_ip()
-                    default_cidr = get_cidr(default_ip)
-                else:
-                    default_ip = "127.0.0.1"
-                    default_cidr = 8
-                if self.validate_ip_address(default_ip):
-                    self.ip_input.setText(default_ip)
-                    self.network_selector.setCurrentIndex(default_cidr)
-                    logger.info(f"Set default values - IP: {default_ip}, CIDR: {default_cidr}")
-                else:
-                    logger.warning(f"Invalid default IP address: {default_ip}")
-            except Exception as e:
-                logger.warning(
-                    f"Could not determine default network settings: {type(e).__name__} {str(e)}\n{traceback.format_exc()}"
-                )
-
-        def add_output_field(self, layout, label_text, line_edit):
-            try:
-                field_layout = QHBoxLayout()
-                label = QLabel(label_text)
-                label_font = QFont('Ubuntu', 13)  # 13
-                if not label_font.exactMatch():
-                    label_font = QFont('Arial', 13)
-                label.setFont(label_font)
-                line_edit.setReadOnly(True)
-                field_layout.addWidget(label)
-                field_layout.addWidget(line_edit)
-                layout.addLayout(field_layout)
-            except Exception as e:
-                logger.error(
-                    f"Failed to add output field '{label_text}': {type(e).__name__} {str(e)}\n{traceback.format_exc()}"
-                )
-
-        def calculate_network(self, *args, **kwargs):
-            try:
-                ip_addr = self.ip_input.text().strip()
-                prefix_text = self.network_selector.currentText()
-                if not ip_addr:
-                    raise ValueError("IP address is required")
-                if not self.validate_ip_address(ip_addr):
-                    raise ValueError(f"Invalid IP address format: {ip_addr}")
-                prefix, netmask = prefix_text.split('/')
-                if not self.validate_cidr(prefix):
-                    raise ValueError(f"Invalid CIDR: {prefix}")
-
-                # Use core calculation module
-                result = compute(ip_addr, int(prefix))
-
-                self.network_output.setText(result["network"])
-                self.broadcast_output.setText(result["broadcast"])
-                self.prefix_output.setText(result["prefix"])
-                self.netmask_output.setText(netmask)
-                self.hostmin_output.setText(result["hostmin"])
-                self.hostmax_output.setText(result["hostmax"])
-                self.hosts_output.setText(result["hosts"])
-
-                # Handle special range comments in status bar
-                comment = result.get("comment", "")
-
-                if comment:
-                    # Show comment for special ranges with GitHub link
-                    # Extract the URL from the comment
-                    if '(' in comment and ')' in comment:
-                        url_start = comment.find('(')
-                        url_end = comment.find(')')
-                        if url_start != -1 and url_end != -1:
-                            url = comment[url_start + 1:url_end]
-                            display_text = comment[:url_start].strip() + ' (GitHub)'
-                            # Special networks are informational, not warnings
-                            self.status_label.setText(f'<a href="{url}">{display_text}</a>')
-                            self.status_label.setOpenExternalLinks(True)
-                        else:
-                            self.status_label.setText(f'<span>{comment}</span>')
-                            self.status_label.setOpenExternalLinks(False)
-                    else:
-                        self.status_label.setText(f'<span>{comment}</span>')
-                        self.status_label.setOpenExternalLinks(False)
-                else:
-                    # Show version link for normal unicast ranges
-                    self.status_label.setText(f'<a href="{REPO_URL}">LanCalc {VERSION}</a>')
-                    self.status_label.setOpenExternalLinks(True)
-
-                self.ip_input.setStyleSheet("color: black;")
-            except ValueError as e:
-                # Handle validation errors - show error in status bar with red color
-                self.status_label.setText('<span style="color: red;">Wrong Address</span>')
-                self.status_label.setOpenExternalLinks(False)
-                self.ip_input.setStyleSheet("color: red;")
-                logger.warning(f"Validation error: {str(e)}")
-            except Exception as e:
-                logger.error(
-                    f"Unexpected error in network calculation: {type(e).__name__} {str(e)}\n{traceback.format_exc()}"
-                )
-                self.ip_input.setStyleSheet("color: red;")
-
-        def keyPressEvent(self, event: QKeyEvent):
-            try:
-                if event.key() == Qt.Key_Return:
-                    self.calculate_network()
-                else:
-                    super().keyPressEvent(event)
-            except Exception as e:
-                logger.error(f"Error handling key press event: {type(e).__name__} {str(e)}\n{traceback.format_exc()}")
-
-        def closeEvent(self, event):
-            logger.info("LanCalc application closing")
-            super().closeEvent(event)
+    # Default to GUI if available
+    return 'gui'
 
 
-def _run_gui() -> int:
-    if not GUI_AVAILABLE:
-        logger.critical("GUI is not available on this system (PyQt5 not installed or no display)")
-        return 1
-    app = QApplication(sys.argv)
-    ex = LanCalc()  # type: ignore[name-defined]
-    ex.show()
-    return app.exec_()
-
-
-def main(argv=None) -> int:
+def main(argv: typing.Optional[list] = None) -> int:
     """
     Main entry point for LanCalc.
 
-    Exit codes:
-    0 - Success
-    1 - Validation error or general error
-    2 - Headless environment and no address provided
+    Automatically detects whether to run in GUI or CLI mode based on:
+    - Command line arguments
+    - Environment variables (CI, DISPLAY, etc.)
+    - System capabilities
+    - GUI availability
+
+    Args:
+        argv: Command line arguments (uses sys.argv if None)
+
+    Returns:
+        Exit code (0 for success, 1 for error, 2 for headless without args)
     """
-    parser = argparse.ArgumentParser(
-        prog="lancalc",
-        description=f"LanCalc {VERSION}: GUI + CLI IPv4 calculator. Result to stdout, logs to stderr.",
-    )
-    parser.add_argument(
-        "address",
-        nargs="?",
-        help="IPv4 in CIDR, for example 192.168.88.2/24",
-    )
-    parser.add_argument(
-        "--json", "-j",
-        action="store_true",
-        help="Output result as JSON instead of text",
-    )
+    if argv is None:
+        argv = sys.argv
 
-    args = parser.parse_args(argv)
+    # If arguments are provided, use CLI mode
+    if len(argv) > 1:
+        return cli.main(argv[1:])  # Skip the script name
 
-    have_addr = bool(args.address and args.address.strip())
-    headless = is_headless_linux()
+    # Auto-detect interface mode
+    mode = detect_interface_mode()
 
-    # Conditions for CLI: there is an address OR CLI is forced OR headless environment
-    if have_addr or headless:
-        if not have_addr:
-            # Argument is required: print a hint to stdout, code 2
-            print("ADDRESS argument required, e.g. 192.168.88.2/24. Use --help for details.")
-            return 2
+    if mode == 'gui':
         try:
-            res = calc_network(args.address)
-            if args.json:
-                print_result_json(res)
-            else:
-                print_result_stdout(res)
-            return 0
-        except ValueError as e:
-            # Log validation errors to stderr only
-            logger.error(f"Validation error: {str(e)}")
-            return 1
+            return gui.run_gui()
         except Exception as e:
-            logger.error(f"{type(e).__name__} {str(e)}\n{traceback.format_exc()}")
-            return 1
-
-    # Otherwise — try GUI
-    try:
-        return _run_gui()
-    except Exception as e:
-        logger.critical(f"Failed to start GUI: {type(e).__name__} {str(e)}\n{traceback.format_exc()}")
-        # Last attempt — inform the user about the argument
-        print("GUI is unavailable. Provide ADDRESS argument, e.g. 192.168.88.2/24. Use --help.")
-        return 1
+            logger.error(f"GUI failed: {type(e).__name__} {str(e)}")
+            # Fallback to CLI help
+            return cli.main(['--help'])
+    else:
+        # For CLI mode without arguments, show help
+        return cli.main(['--help'])
 
 
 if __name__ == "__main__":

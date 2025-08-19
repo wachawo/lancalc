@@ -6,4 +6,5 @@ exclude =
     __pycache__,
     *.egg-info,
     build,
-    dist
+    dist,
+    .backup,

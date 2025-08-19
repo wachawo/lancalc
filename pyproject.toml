@@ -29,15 +29,20 @@ classifiers = [
 requires-python = ">=3.9"
 dependencies = [
     "netifaces>=0.11.0; platform_system == 'Linux'",
+    "PyQt5>=5.15",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0.0", "pytest-qt>=4.0.0", "pre-commit", "flake8"]
-gui = ["PyQt5>=5.15"]
-dist = ["PyInstaller>=6.0.0"]  # бывший build
+# For building standalone binaries
+dist = ["PyInstaller>=6.0.0"]
+# Non-GUI runtime deps (to use with two-step install to avoid PyQt5)
+nogui = [
+    "netifaces>=0.11.0; platform_system == 'Linux'",
+]
 
 [project.scripts]
-lancalc = "lancalc.main:main"
+lancalc = "lancalc:main"
 
 [project.urls]
 Homepage = "https://github.com/lancalc/lancalc"

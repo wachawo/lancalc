@@ -2,19 +2,38 @@
 # -*- coding: utf-8 -*-
 
 """
-LanCalc - A desktop application for calculating network configurations
+LanCalc - IPv4 subnet calculator with GUI and CLI interfaces.
+
+A cross-platform tool for calculating IPv4 network parameters including
+network address, broadcast address, host range, and special IPv4 range detection.
 """
 
-__version__ = '0.1.8'
+__version__ = "0.1.9"
 __author__ = 'Aleksandr Pimenov'
 __email__ = 'wachawo@gmail.com'
 
-from .main import main
+# Import modules
+from . import core
+from . import cli
+from . import gui
+from . import main
+from . import adapters
 
-# Try to import LanCalc only if GUI is available
+# Export LanCalc for tests
 try:
-    from .main import LanCalc  # noqa: F401
-    __all__ = ['main', 'LanCalc', '__version__']
+    from .gui import LanCalcGUI
+    LanCalc = LanCalcGUI
 except ImportError:
-    # GUI not available, only export main function
-    __all__ = ['main', '__version__']
+    LanCalc = None
+
+__all__ = [
+    "__version__",
+    "__author__",
+    "__email__",
+    "core",
+    "cli",
+    "gui",
+    "main",
+    "adapters",
+    "LanCalc",
+]

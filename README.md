@@ -6,7 +6,7 @@
 
 LanCalc is a desktop application built with PyQt5, designed to calculate network configurations for Windows, macOS, and Linux systems.
 
-![image](https://github.com/user-attachments/assets/be7655cc-9348-4d7c-bb25-a650e00cc422)
+![image](https://github.com/user-attachments/assets/a7d1779f-d138-4819-84c6-4df876efc292)
 
 [Download](https://github.com/lancalc/lancalc/releases)
 
@@ -18,19 +18,44 @@ Support IPv4 address formats, subnet masks and prefixes. This tool is particular
 
 ### Installation
 
-**Install LanCalc Stable version:**
+Python 3.9+ is required.
+
+- Default (with GUI):
 
 ```bash
 pip3 install lancalc
 ```
 
-**Or install LanCalc from GitHub:**
+- CLI-only / headless (avoid installing PyQt5):
 
 ```bash
-pip3 install git+https://github.com/lancalc/lancalc.git
+# Install package without dependencies, then only required CLI deps
+pip3 install --no-deps lancalc
+pip3 install -r requirements.txt
 ```
 
-Install PIP
+- Install without GUI dependencies:
+
+```bash
+# Install with nogui extras (excludes PyQt5)
+pip3 install 'lancalc[nogui]'
+```
+
+- Install from GitHub:
+
+```bash
+# With GUI (default)
+pip3 install 'git+https://github.com/lancalc/lancalc.git'
+
+# CLI-only / headless
+pip3 install --no-deps 'git+https://github.com/lancalc/lancalc.git'
+pip3 install -r requirements.txt
+
+# Without GUI dependencies
+pip3 install 'git+https://github.com/lancalc/lancalc.git#egg=lancalc[nogui]'
+```
+
+If pip is missing:
 
 ```bash
 curl https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
@@ -50,15 +75,21 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
+Notes:
+- On Linux, PyQt5 may require system Qt libraries (xcb plugin). If GUI fails to start, ensure a desktop environment is available and try installing system packages (e.g. Debian/Ubuntu: `sudo apt install python3-pyqt5`), or use the CLI-only steps above.
+- In CI/headless environments, prefer the CLI-only steps above to skip GUI dependencies.
+
 ## Running the Application
 
 ### GUI Mode
 
-After installation, launch the application with the command:
+After installation (default with GUI), launch the application with the command:
 
 ```bash
 lancalc
 ```
+
+LanCalc auto-detects the environment. If GUI dependencies are unavailable or you are in a headless session, the launcher falls back to CLI help. In such cases, use the CLI examples below.
 
 ### CLI Mode
 
@@ -76,6 +107,12 @@ lancalc 10.0.0.1/8
 lancalc 172.16.0.1/16
 lancalc 192.168.1.100/31  # Point-to-point network
 lancalc 192.168.1.1/32    # Single host
+```
+
+You can also run via module:
+
+```bash
+python3 -m lancalc 192.168.1.1/24 --json
 ```
 
 ### Output Format
@@ -117,21 +154,34 @@ That's it! The application will start and automatically detect your current netw
 
 ### Prerequisites
 
-Python 3.9+ is required.
+Python 3.9+ is required. GUI development requires PyQt5 (installed by default).
 
-For production use (CLI only):
+- Production (CLI only):
 ```bash
 pip3 install -r requirements.txt
 ```
 
-For GUI support:
+- Editable install with GUI (default):
 ```bash
-pip3 install -e .[gui]
+pip3 install -e .
 ```
 
-For development:
+- Editable install without GUI:
 ```bash
-pip3 install -e .[dev,gui]
+pip3 install --no-deps -e .
+pip3 install -r requirements.txt
+```
+
+- Full dev setup (with GUI):
+```bash
+pip3 install -e '.[dev]'
+```
+
+- Dev without GUI:
+```bash
+pip3 install --no-deps -e .
+pip3 install -r requirements.txt
+pip3 install pytest pytest-qt pre-commit flake8
 ```
 
 ### Installation for Development
@@ -145,7 +195,11 @@ git clone https://github.com/lancalc/lancalc.git
 ### Running from Source
 
 ```bash
+# GUI (requires PyQt5)
 python3 lancalc/main.py
+
+# CLI
+python3 -m lancalc 192.168.1.1/24
 ```
 
 ### Development Tools
@@ -273,7 +327,94 @@ lancalc 224.0.0.1/4 --json
 The JSON output includes the following fields:
 
 - **`comment`**: Description and RFC reference for special ranges (empty for normal unicast addresses)
-- **`comment`**: Description and RFC reference for special ranges (empty for normal unicast addresses)
 - **`hosts`**: Number of available host addresses in the specified subnet
 
 These fields are always present, making the JSON output format consistent regardless of address type.
+
+## Usage
+
+### Command Line Interface
+
+```bash
+# Basic subnet calculation
+lancalc 192.168.1.1/24
+
+# JSON output
+lancalc 192.168.1.1/24 --json
+
+# Show internal/private IP address
+lancalc --internal
+lancalc -i
+
+# Show external/public IP address
+lancalc --external
+lancalc -e
+
+# Use multiple info flags simultaneously
+lancalc -i -e
+lancalc -i -e --json
+
+# Show version
+lancalc --version
+```
+
+### Examples
+
+**Basic calculation:**
+```bash
+$ lancalc 192.168.1.1/24
+Network: 192.168.1.0
+Prefix: /24
+Netmask: 255.255.255.0
+Broadcast: 192.168.1.255
+Hostmin: 192.168.1.1
+Hostmax: 192.168.1.254
+Hosts: 254
+```
+
+**JSON output:**
+```bash
+$ lancalc 192.168.1.1/24 --json
+{
+  "network": "192.168.1.0",
+  "prefix": "/24",
+  "netmask": "255.255.255.0",
+  "broadcast": "192.168.1.255",
+  "hostmin": "192.168.1.1",
+  "hostmax": "192.168.1.254",
+  "hosts": "254"
+}
+```
+
+**Interface information:**
+```bash
+$ lancalc -i
+Address: 10.16.69.146
+Prefix: /24
+
+$ lancalc -i --json
+{"address": "10.16.69.146", "prefix": "/24"}
+```
+
+**External IP detection:**
+```bash
+$ lancalc -e
+External IP: 216.66.18.3
+
+$ lancalc -e --json
+{"external_ip": "216.66.18.3"}
+```
+
+**Multiple info flags:**
+```bash
+$ lancalc -i -e
+Address: 10.16.69.146
+Prefix: /24
+
+External IP: 216.66.18.3
+
+$ lancalc -i -e --json
+{"address": "10.16.69.146", "prefix": "/24"}
+
+{"external_ip": "216.66.18.3"}
+```
