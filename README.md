@@ -45,14 +45,14 @@ pip3 install 'lancalc[nogui]'
 
 ```bash
 # With GUI (default)
-pip3 install 'git+https://github.com/lancalc/lancalc.git'
+pip3 install 'git+https://github.com/wachawo/lancalc.git'
 
 # CLI-only / headless
-pip3 install --no-deps 'git+https://github.com/lancalc/lancalc.git'
+pip3 install --no-deps 'git+https://github.com/wachawo/lancalc.git'
 pip3 install -r requirements.txt
 
 # Without GUI dependencies
-pip3 install 'git+https://github.com/lancalc/lancalc.git#egg=lancalc[nogui]'
+pip3 install 'git+https://github.com/wachawo/lancalc.git#egg=lancalc[nogui]'
 ```
 
 If pip is missing:
@@ -194,7 +194,7 @@ pip3 install -e . --force-reinstall
 Clone the repository and install in development mode:
 
 ```bash
-git clone https://github.com/lancalc/lancalc.git
+git clone https://github.com/wachawo/lancalc.git
 ```
 
 ### Running from Source
@@ -302,7 +302,7 @@ Broadcast: *
 Hostmin: 127.0.0.1
 Hostmax: 127.255.255.254
 Hosts: 16777214
-Comment: RFC 3330 Loopback (https://github.com/lancalc/lancalc/blob/main/docs/RFC.md#rfc-3330---loopback-addresses)
+Comment: RFC 3330 Loopback (https://github.com/wachawo/lancalc/blob/main/docs/RFC.md#rfc-3330---loopback-addresses)
 ```
 
 **CLI JSON Mode:**
@@ -318,7 +318,7 @@ lancalc 224.0.0.1/4 --json
   "hostmin": "*",
   "hostmax": "*",
   "hosts": "*",
-  "comment": "RFC 5771 Multicast (https://github.com/lancalc/lancalc/blob/main/docs/RFC.md#rfc-5771---multicast-addresses)"
+  "comment": "RFC 5771 Multicast (https://github.com/wachawo/lancalc/blob/main/docs/RFC.md#rfc-5771---multicast-addresses)"
 }
 ```
 

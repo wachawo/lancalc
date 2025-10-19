@@ -20,7 +20,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-REPO_URL = "https://github.com/lancalc/lancalc"
+REPO_URL = "https://github.com/wachawo/lancalc"
 
 
 def validate_ip(ip: str) -> None:

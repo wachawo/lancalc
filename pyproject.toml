@@ -45,10 +45,10 @@ nogui = [
 lancalc = "lancalc.main:main"
 
 [project.urls]
-Homepage = "https://github.com/lancalc/lancalc"
-Repository = "https://github.com/lancalc/lancalc"
-Documentation = "https://github.com/lancalc/lancalc#readme"
-"Bug Reports" = "https://github.com/lancalc/lancalc/issues"
+Homepage = "https://github.com/wachawo/lancalc"
+Repository = "https://github.com/wachawo/lancalc"
+Documentation = "https://github.com/wachawo/lancalc#readme"
+"Bug Reports" = "https://github.com/wachawo/lancalc/issues"
 
 [tool.setuptools.dynamic]
 version = { attr = "lancalc.__version__" }

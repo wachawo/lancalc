@@ -34,7 +34,7 @@ $ lancalc 127.0.0.1/8 --json
   "hostmin": "127.0.0.1",
   "hostmax": "127.255.255.254",
   "hosts": "16777214",
-  "comment": "RFC 3330 Loopback (https://github.com/lancalc/lancalc/blob/main/docs/RFC.md#rfc-3330---loopback-addresses)"
+  "comment": "RFC 3330 Loopback (https://github.com/wachawo/lancalc/blob/main/docs/RFC.md#rfc-3330---loopback-addresses)"
 }
 ```
 
@@ -69,7 +69,7 @@ $ lancalc 169.254.1.1/16 --json
   "hostmin": "*",
   "hostmax": "*",
   "hosts": "*",
-  "comment": "RFC 3927 Link-local (https://github.com/lancalc/lancalc/blob/main/docs/RFC.md#rfc-3927---link-local-addresses)"
+  "comment": "RFC 3927 Link-local (https://github.com/wachawo/lancalc/blob/main/docs/RFC.md#rfc-3927---link-local-addresses)"
 }
 ```
 
@@ -103,7 +103,7 @@ $ lancalc 224.0.0.1/4 --json
   "hostmin": "*",
   "hostmax": "*",
   "hosts": "*",
-  "comment": "RFC 5771 Multicast (https://github.com/lancalc/lancalc/blob/main/docs/RFC.md#rfc-5771---multicast-addresses)"
+  "comment": "RFC 5771 Multicast (https://github.com/wachawo/lancalc/blob/main/docs/RFC.md#rfc-5771---multicast-addresses)"
 }
 ```
 
@@ -137,7 +137,7 @@ $ lancalc 0.0.0.1/8 --json
   "hostmin": "*",
   "hostmax": "*",
   "hosts": "*",
-  "comment": "RFC 1122 Unspecified (https://github.com/lancalc/lancalc/blob/main/docs/RFC.md#rfc-1122---unspecified-addresses)"
+  "comment": "RFC 1122 Unspecified (https://github.com/wachawo/lancalc/blob/main/docs/RFC.md#rfc-1122---unspecified-addresses)"
 }
 ```
 
@@ -171,7 +171,7 @@ $ lancalc 255.255.255.255/32 --json
   "hostmin": "*",
   "hostmax": "*",
   "hosts": "*",
-  "comment": "RFC 919 Broadcast (https://github.com/lancalc/lancalc/blob/main/docs/RFC.md#rfc-919---broadcast-address)"
+  "comment": "RFC 919 Broadcast (https://github.com/wachawo/lancalc/blob/main/docs/RFC.md#rfc-919---broadcast-address)"
 }
 ```
 
