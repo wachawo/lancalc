@@ -1,14 +1,14 @@
 # LanCalc
 
-[![CI](https://github.com/lancalc/lancalc/actions/workflows/ci.yml/badge.svg)](https://github.com/lancalc/lancalc/actions/workflows/ci.yml)
+[![CI](https://github.com/wachawo/lancalc/actions/workflows/ci.yml/badge.svg)](https://github.com/wachawo/lancalc/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/lancalc.svg)](https://pypi.org/project/lancalc/)
 [![Python](https://img.shields.io/pypi/pyversions/lancalc.svg)](https://pypi.org/project/lancalc/)
 
 LanCalc is a desktop application built with PyQt5, designed to calculate network configurations for Windows, macOS, and Linux systems.
 
-![image](https://github.com/user-attachments/assets/a7d1779f-d138-4819-84c6-4df876efc292)
+![image](https://github.com/user-attachments/assets/8a4e1226-7ace-4e53-b154-87e0e311100f)
 
-[Download](https://github.com/lancalc/lancalc/releases)
+[Download](https://github.com/wachawo/lancalc/releases)
 
 It provides a user-friendly interface to compute essential network parameters such as network address, broadcast address, the minimum and maximum host addresses, and the number of hosts within a given subnet. 
 
@@ -246,7 +246,7 @@ Distributed under the MIT License. See LICENSE for more information.
 
 ## Contact
 
-[GitHub](https://github.com/lancalc/lancalc) [Telegram](https://t.me/wachawo)
+[GitHub](https://github.com/wachawo/lancalc) [Telegram](https://t.me/wachawo)
 
 ## Notes
 
