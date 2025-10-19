@@ -8,7 +8,7 @@ A cross-platform tool for calculating IPv4 network parameters including
 network address, broadcast address, host range, and special IPv4 range detection.
 """
 
-__version__ = "0.1.10"
+__version__ = "0.1.11"
 __author__ = 'Aleksandr Pimenov'
 __email__ = 'wachawo@gmail.com'
 
