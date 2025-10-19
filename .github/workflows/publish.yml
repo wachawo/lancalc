@@ -7,7 +7,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write   # нужно для OIDC
+  id-token: write
 
 jobs:
   build-and-publish:
