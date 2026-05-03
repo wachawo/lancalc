@@ -110,19 +110,24 @@ class LanCalcTUI:
         )
         self.input_buffer.text = initial_text or default_input_text()
 
-        self.kb = self._build_keybindings()
-        self.layout = self._build_layout()
-        self.style = self._build_style()
-
-        self.app = Application(
-            layout=self.layout,
-            key_bindings=self.kb,
-            full_screen=True,
-            style=self.style,
-            mouse_support=False,
-        )
+        # Application is built lazily in run() — constructing it touches the
+        # terminal (Win32Output needs a real console screen buffer), which
+        # fails under pytest's stdout capture on Windows CI.
+        self.app = None
 
         self._compute()
+
+    def _build_app(self) -> "Application":
+        kb = self._build_keybindings()
+        layout = self._build_layout()
+        style = self._build_style()
+        return Application(
+            layout=layout,
+            key_bindings=kb,
+            full_screen=True,
+            style=style,
+            mouse_support=False,
+        )
 
     def _compute(self) -> None:
         """Recalculate result from current input buffer text."""
@@ -293,6 +298,8 @@ class LanCalcTUI:
 
     def run(self) -> int:
         try:
+            if self.app is None:
+                self.app = self._build_app()
             self.app.run()
             return 0
         except Exception as e:
