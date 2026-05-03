@@ -26,11 +26,13 @@ try:
 except ImportError:
     try:
         from lancalc import __version__ as VERSION
-        import core
-        import adapters
+        from lancalc import core
+        from lancalc import adapters
     except Exception as e:
         logger.warning(f"{type(e).__name__} {str(e)}\n{traceback.format_exc()}")
         VERSION = "0.0.0"
+        core = None
+        adapters = None
 
 logger.debug(f"LanCalc {VERSION} starting...")
 
@@ -55,7 +57,16 @@ except ImportError:
     GUI_AVAILABLE = False
     logger.warning("PyQt5 not available - GUI mode disabled")
 
-    # Mock classes for when GUI is not available
+    # Stubs let the module load when PyQt5 is missing; actual GUI usage is
+    # gated by GUI_AVAILABLE in main()/launcher.
+
+    class _GuiUnavailable:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("GUI not available - PyQt5 is not installed")
+
+    QApplication = QWidget = QVBoxLayout = QHBoxLayout = _GuiUnavailable
+    QLabel = QLineEdit = QPushButton = QComboBox = _GuiUnavailable
+
     class QKeyEvent:
         pass
 
@@ -64,6 +75,21 @@ except ImportError:
             pass
 
         Bold = 75
+
+    class _QtStub:
+        AlignRight = 0
+        AlignCenter = 0
+        Key_Enter = 0
+        Key_Return = 0
+        Key_Tab = 0
+
+    class _QEventStub:
+        FocusOut = 0
+        FocusIn = 0
+        KeyPress = 0
+
+    Qt = _QtStub
+    QEvent = _QEventStub
 
 
 class IpInputLineEdit(QLineEdit):

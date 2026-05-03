@@ -20,39 +20,46 @@ Support IPv4 address formats, subnet masks and prefixes. This tool is particular
 
 Python 3.9+ is required.
 
-- Default (with GUI):
+- Default (both GUI and TUI):
 
 ```bash
 pip3 install lancalc
 ```
 
-- CLI-only / headless (avoid installing PyQt5):
+- TUI only (terminal interface, no PyQt5 — recommended for servers/SSH):
 
 ```bash
-# Install package without dependencies, then only required CLI deps
 pip3 install --no-deps lancalc
-pip3 install -r requirements.txt
+pip3 install 'lancalc[tui]'
 ```
 
-- Install without GUI dependencies:
+- GUI only (no prompt_toolkit):
 
 ```bash
-# Install with nogui extras (excludes PyQt5)
-pip3 install 'lancalc[nogui]'
+pip3 install --no-deps lancalc
+pip3 install 'lancalc[gui]'
+```
+
+- CLI only (no UI deps at all):
+
+```bash
+pip3 install --no-deps lancalc
+pip3 install -r requirements.txt
 ```
 
 - Install from GitHub:
 
 ```bash
-# With GUI (default)
+# With both UIs (default)
 pip3 install 'git+https://github.com/wachawo/lancalc.git'
 
-# CLI-only / headless
+# TUI only
 pip3 install --no-deps 'git+https://github.com/wachawo/lancalc.git'
-pip3 install -r requirements.txt
+pip3 install 'lancalc[tui]'
 
-# Without GUI dependencies
-pip3 install 'git+https://github.com/wachawo/lancalc.git#egg=lancalc[nogui]'
+# GUI only
+pip3 install --no-deps 'git+https://github.com/wachawo/lancalc.git'
+pip3 install 'lancalc[gui]'
 ```
 
 If pip is missing:
@@ -81,15 +88,44 @@ Notes:
 
 ## Running the Application
 
-### GUI Mode
+### Mode auto-detection
 
-After installation (default with GUI), launch the application with the command:
+Run with no arguments — LanCalc picks the best interface:
 
 ```bash
-lancalc
+lancalc          # auto: GUI on desktops, TUI in SSH/terminals, CLI help if neither available
+lancalc --gui    # force graphical interface (PyQt5)
+lancalc --tui    # force interactive terminal interface (prompt_toolkit)
+lancalc --nogui  # force CLI mode (for use in scripts; never opens GUI/TUI)
 ```
 
-LanCalc auto-detects the environment. If GUI dependencies are unavailable or you are in a headless session, the launcher falls back to CLI help. In such cases, use the CLI examples below.
+The `--gui`, `--tui`, and `--nogui` flags are mutually exclusive.
+
+### GUI Mode
+
+```bash
+lancalc --gui
+```
+
+PyQt5-based desktop window. Detected automatically when a display is available.
+
+### TUI Mode
+
+```bash
+lancalc --tui
+```
+
+Interactive full-screen terminal UI based on `prompt_toolkit`. Recomputes live as you type. Detected automatically over SSH and on headless systems with a TTY.
+
+Key bindings:
+
+| Key | Action |
+|---|---|
+| Type IP or `IP/prefix` | Live recompute |
+| `↑` / `↓` | Increase / decrease prefix (clamped to 0..32) |
+| `Ctrl-R` | Re-detect local IP and CIDR |
+| `Ctrl-Y` | Copy result to clipboard |
+| `Esc` / `Ctrl-Q` / `Ctrl-C` | Quit |
 
 ### CLI Mode
 

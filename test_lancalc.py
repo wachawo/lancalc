@@ -11,6 +11,8 @@ from lancalc.core import compute, compute_from_cidr, validate_ip, validate_prefi
 from lancalc.core import REPO_URL
 from lancalc.adapters import get_internal_ip, get_external_ip, get_cidr, get_cidr_windows, get_cidr_macos, get_cidr_linux, cidr_from_netmask
 from lancalc.cli import print_result_json
+from lancalc import tui as tui_module
+from lancalc import main as main_module
 
 # Try to import LanCalc only if GUI is available
 try:
@@ -1084,6 +1086,206 @@ def test_external_ip_cli_json():
     else:
         # Failure case (network issues, etc.)
         assert "Failed to get external IP" in result.stderr or "Failed to get external IP" in result.stdout
+
+
+# --- TUI tests ---
+
+
+def test_tui_module_importable():
+    """TUI module imports cleanly and exposes TUI_AVAILABLE flag."""
+    assert hasattr(tui_module, "TUI_AVAILABLE")
+    assert isinstance(tui_module.TUI_AVAILABLE, bool)
+    assert hasattr(tui_module, "main")
+    assert callable(tui_module.main)
+
+
+def test_tui_default_input_text_format():
+    """default_input_text returns 'ip/cidr' format with valid components."""
+    text = tui_module.default_input_text()
+    assert "/" in text
+    ip, prefix = text.split("/", 1)
+    # Should always be valid (falls back to 192.168.1.1/24 on any failure)
+    ipaddress.IPv4Address(ip)
+    assert 0 <= int(prefix) <= 32
+
+
+@pytest.mark.skipif(not tui_module.TUI_AVAILABLE, reason="prompt_toolkit not installed")
+def test_tui_compute_valid_input():
+    """LanCalcTUI._compute populates result dict for a valid CIDR."""
+    app = tui_module.LanCalcTUI(initial_text="192.168.1.1/24")
+    assert app.result["network"] == "192.168.1.0"
+    assert app.result["prefix"] == "/24"
+    assert app.result["netmask"] == "255.255.255.0"
+    assert app.result["broadcast"] == "192.168.1.255"
+    assert app.result["hosts"] == "254"
+
+
+@pytest.mark.skipif(not tui_module.TUI_AVAILABLE, reason="prompt_toolkit not installed")
+def test_tui_compute_invalid_input_sets_error():
+    """Invalid input clears results and sets an error status."""
+    app = tui_module.LanCalcTUI(initial_text="not-an-ip/24")
+    assert all(v == "" for v in app.result.values())
+    assert app.status_class == "class:error"
+    assert "Error" in app.status_text or "Invalid" in app.status_text
+
+
+@pytest.mark.skipif(not tui_module.TUI_AVAILABLE, reason="prompt_toolkit not installed")
+def test_tui_compute_implicit_prefix():
+    """Bare IP without slash defaults to /24."""
+    app = tui_module.LanCalcTUI(initial_text="10.0.0.5")
+    assert app.result["prefix"] == "/24"
+    assert app.result["network"] == "10.0.0.0"
+
+
+@pytest.mark.skipif(not tui_module.TUI_AVAILABLE, reason="prompt_toolkit not installed")
+def test_tui_shift_prefix_clamped():
+    """↑/↓ keys nudge the prefix and clamp to 0..32."""
+    app = tui_module.LanCalcTUI(initial_text="192.168.1.1/24")
+    app._shift_prefix(+1)
+    assert app.input_buffer.text == "192.168.1.1/25"
+    app._shift_prefix(-2)
+    assert app.input_buffer.text == "192.168.1.1/23"
+    # Clamp at upper bound
+    app.input_buffer.text = "192.168.1.1/32"
+    app._shift_prefix(+5)
+    assert app.input_buffer.text == "192.168.1.1/32"
+    # Clamp at lower bound
+    app.input_buffer.text = "192.168.1.1/0"
+    app._shift_prefix(-5)
+    assert app.input_buffer.text == "192.168.1.1/0"
+
+
+def test_tui_clipboard_candidates_per_platform():
+    """clipboard_candidates returns at least one tool per supported OS."""
+    cands = tui_module.clipboard_candidates()
+    assert isinstance(cands, list)
+    assert len(cands) >= 1
+    for cmd in cands:
+        assert isinstance(cmd, list) and cmd and isinstance(cmd[0], str)
+
+
+def test_tui_copy_to_system_clipboard_no_tool(monkeypatch):
+    """When no clipboard tool is found, helper returns (False, helpful_msg)."""
+    monkeypatch.setattr(tui_module, "clipboard_candidates", lambda: [["definitely-not-a-real-tool-xyz"]])
+    ok, info = tui_module.copy_to_system_clipboard("hello")
+    assert ok is False
+    assert "no clipboard tool" in info or "definitely-not-a-real-tool-xyz" in info
+
+
+@pytest.mark.skipif(not tui_module.TUI_AVAILABLE, reason="prompt_toolkit not installed")
+def test_tui_copy_result_status_on_failure(monkeypatch):
+    """_copy_result sets an error status when no clipboard tool is available."""
+    monkeypatch.setattr(tui_module, "clipboard_candidates", lambda: [])
+    app = tui_module.LanCalcTUI(initial_text="192.168.1.1/24")
+    app._copy_result()
+    assert app.status_class == "class:error"
+    assert "Copy failed" in app.status_text
+
+
+@pytest.mark.skipif(not tui_module.TUI_AVAILABLE, reason="prompt_toolkit not installed")
+def test_tui_compute_special_range_loopback():
+    """Special ranges (loopback) populate the comment in the status line."""
+    app = tui_module.LanCalcTUI(initial_text="127.0.0.1/8")
+    assert app.status_class == "class:special"
+    assert "RFC" in app.status_text
+
+
+# --- Launcher tests ---
+
+
+def test_main_extract_mode_flag_gui():
+    rest, mode = main_module.extract_mode_flag(["--gui", "192.168.1.1/24"])
+    assert mode == "gui"
+    assert rest == ["192.168.1.1/24"]
+
+
+def test_main_extract_mode_flag_tui_short():
+    rest, mode = main_module.extract_mode_flag(["-t"])
+    assert mode == "tui"
+    assert rest == []
+
+
+def test_main_extract_mode_flag_mutually_exclusive():
+    _, mode = main_module.extract_mode_flag(["--gui", "--tui"])
+    assert mode == "error"
+
+
+def test_main_extract_mode_flag_nogui():
+    rest, mode = main_module.extract_mode_flag(["--nogui", "192.168.1.1/24"])
+    assert mode == "cli"
+    assert rest == ["192.168.1.1/24"]
+
+
+def test_main_extract_mode_flag_nogui_with_other_args():
+    rest, mode = main_module.extract_mode_flag(["--nogui", "--json", "10.0.0.1/8"])
+    assert mode == "cli"
+    assert rest == ["--json", "10.0.0.1/8"]
+
+
+def test_main_extract_mode_flag_nogui_conflicts_with_gui():
+    _, mode = main_module.extract_mode_flag(["--gui", "--nogui"])
+    assert mode == "error"
+
+
+def test_main_extract_mode_flag_nogui_conflicts_with_tui():
+    _, mode = main_module.extract_mode_flag(["--tui", "--nogui"])
+    assert mode == "error"
+
+
+def test_main_no_dash_form_not_recognized():
+    """`--no-gui` (with dash) is NOT a valid alias; treat as a stray arg."""
+    rest, mode = main_module.extract_mode_flag(["--no-gui", "192.168.1.1/24"])
+    assert mode is None
+    assert "--no-gui" in rest
+
+
+def test_main_extract_mode_flag_none():
+    rest, mode = main_module.extract_mode_flag(["192.168.1.1/24", "--json"])
+    assert mode is None
+    assert rest == ["192.168.1.1/24", "--json"]
+
+
+def test_main_has_positional_address():
+    assert main_module.has_positional_address(["192.168.1.1/24"]) is True
+    assert main_module.has_positional_address(["192.168.1.1/24", "--json"]) is True
+    assert main_module.has_positional_address(["--json"]) is False
+    assert main_module.has_positional_address([]) is False
+
+
+def test_main_positional_routes_to_cli(capsys):
+    """A positional CIDR runs the one-shot CLI even with mode flag present."""
+    code = main_module.main(["lancalc", "--tui", "192.168.1.1/24", "--json"])
+    assert code == 0
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert data["network"] == "192.168.1.0"
+
+
+def test_main_nogui_with_positional(capsys):
+    """--nogui works for script use cases: never opens GUI/TUI, runs CLI."""
+    code = main_module.main(["lancalc", "--nogui", "192.168.88.254/24"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "Network: 192.168.88.0" in out
+    assert "Hostmax: 192.168.88.254" in out
+
+
+def test_main_nogui_json(capsys):
+    """--nogui composes with --json for machine-readable script output."""
+    code = main_module.main(["lancalc", "--nogui", "--json", "10.0.0.1/8"])
+    assert code == 0
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert data["network"] == "10.0.0.0"
+    assert data["prefix"] == "/8"
+
+
+def test_main_nogui_alone_prints_help(capsys):
+    """`lancalc --nogui` with nothing else prints CLI help (never opens GUI/TUI)."""
+    code = main_module.main(["lancalc", "--nogui"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "usage:" in out.lower()
 
 
 def main():
