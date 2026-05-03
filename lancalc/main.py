@@ -194,12 +194,18 @@ def main(argv: typing.Optional[list] = None) -> int:
 
     # No positional: interactive launch.
     if forced == 'gui':
+        if args:
+            print(f"Error: --gui takes no other arguments (got: {' '.join(args)})", file=sys.stderr)
+            return 2
         if not getattr(gui, 'GUI_AVAILABLE', False):
             print("Error: --gui requested but PyQt5 is not installed", file=sys.stderr)
             return 1
         return run_gui_or_fallback()
 
     if forced == 'tui':
+        if args:
+            print(f"Error: --tui takes no other arguments (got: {' '.join(args)})", file=sys.stderr)
+            return 2
         if not getattr(tui, 'TUI_AVAILABLE', False):
             print("Error: --tui requested but prompt_toolkit is not installed", file=sys.stderr)
             return 1

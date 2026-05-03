@@ -44,6 +44,14 @@ pip3 install 'lancalc[gui]'
 
 ```bash
 pip3 install --no-deps lancalc
+```
+
+(LanCalc's CLI has no third-party runtime dependencies — `--no-deps` alone is enough.)
+
+- Full runtime via `requirements.txt` (CLI + TUI + GUI, equivalent to default install):
+
+```bash
+pip3 install --no-deps lancalc
 pip3 install -r requirements.txt
 ```
 
@@ -192,31 +200,31 @@ That's it! The application will start and automatically detect your current netw
 
 Python 3.9+ is required. GUI development requires PyQt5 (installed by default).
 
-- Production (CLI only):
+- Production (full runtime — CLI + TUI + GUI):
 ```bash
 pip3 install -r requirements.txt
 ```
 
-- Editable install with GUI (default):
+- Editable install with both UIs (default):
 ```bash
 pip3 install -e .
 ```
 
-- Editable install without GUI:
+- Editable install without GUI (TUI only):
 ```bash
 pip3 install --no-deps -e .
-pip3 install -r requirements.txt
+pip3 install -e '.[tui]'
 ```
 
-- Full dev setup (with GUI):
+- Full dev setup (with both UIs + test/lint tooling):
 ```bash
 pip3 install -e '.[dev]'
 ```
 
-- Dev without GUI:
+- Dev without GUI (TUI only + test/lint tooling):
 ```bash
 pip3 install --no-deps -e .
-pip3 install -r requirements.txt
+pip3 install -e '.[tui]'
 pip3 install pytest pytest-qt pre-commit flake8
 ```
 

@@ -1172,6 +1172,29 @@ def test_tui_copy_to_system_clipboard_no_tool(monkeypatch):
     assert "no clipboard tool" in info or "definitely-not-a-real-tool-xyz" in info
 
 
+def test_tui_clipboard_install_hint_per_platform(monkeypatch):
+    """clipboard_install_hint mentions the right tool for each OS."""
+    monkeypatch.setattr(tui_module.platform, "system", lambda: "Darwin")
+    assert "pbcopy" in tui_module.clipboard_install_hint()
+
+    monkeypatch.setattr(tui_module.platform, "system", lambda: "Windows")
+    assert "clip" in tui_module.clipboard_install_hint()
+
+    monkeypatch.setattr(tui_module.platform, "system", lambda: "Linux")
+    hint = tui_module.clipboard_install_hint()
+    assert "xclip" in hint or "xsel" in hint or "wl-clipboard" in hint
+
+
+def test_tui_copy_no_tool_message_uses_platform_hint(monkeypatch):
+    """The fallback message routes through clipboard_install_hint, so it's OS-aware."""
+    monkeypatch.setattr(tui_module, "clipboard_candidates", lambda: [])
+    monkeypatch.setattr(tui_module.platform, "system", lambda: "Darwin")
+    ok, info = tui_module.copy_to_system_clipboard("hello")
+    assert ok is False
+    assert "pbcopy" in info
+    assert "xclip" not in info  # the Linux hint must not leak
+
+
 @pytest.mark.skipif(not tui_module.TUI_AVAILABLE, reason="prompt_toolkit not installed")
 def test_tui_copy_result_status_on_failure(monkeypatch):
     """_copy_result sets an error status when no clipboard tool is available."""
@@ -1286,6 +1309,31 @@ def test_main_nogui_alone_prints_help(capsys):
     assert code == 0
     out = capsys.readouterr().out
     assert "usage:" in out.lower()
+
+
+def test_main_tui_with_extra_flag_errors(capsys):
+    """`lancalc --tui --help` errors instead of silently ignoring --help."""
+    code = main_module.main(["lancalc", "--tui", "--help"])
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "--tui takes no other arguments" in err
+    assert "--help" in err
+
+
+def test_main_gui_with_extra_flag_errors(capsys):
+    """`lancalc --gui --json` errors instead of silently ignoring --json."""
+    code = main_module.main(["lancalc", "--gui", "--json"])
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "--gui takes no other arguments" in err
+    assert "--json" in err
+
+
+def test_tui_init_raises_when_unavailable(monkeypatch):
+    """LanCalcTUI() raises RuntimeError with a clear message if prompt_toolkit missing."""
+    monkeypatch.setattr(tui_module, "TUI_AVAILABLE", False)
+    with pytest.raises(RuntimeError, match="prompt_toolkit is not installed"):
+        tui_module.LanCalcTUI(initial_text="192.168.1.1/24")
 
 
 def main():

@@ -70,6 +70,16 @@ def clipboard_candidates() -> list:
     ]
 
 
+def clipboard_install_hint() -> str:
+    """OS-appropriate hint for users when no clipboard tool is found."""
+    system = platform.system()
+    if system == "Darwin":
+        return "pbcopy ships with macOS - check that it is on PATH"
+    if system == "Windows":
+        return "clip.exe ships with Windows - check that it is on PATH"
+    return "install xclip, xsel, or wl-clipboard"
+
+
 def copy_to_system_clipboard(text: str) -> typing.Tuple[bool, str]:
     """Try OS-native clipboard tools in order. Return (success, tool_name_or_error)."""
     last_error = ""
@@ -89,7 +99,7 @@ def copy_to_system_clipboard(text: str) -> typing.Tuple[bool, str]:
             continue
     if last_error:
         return False, last_error
-    return False, "no clipboard tool found (install xclip / wl-clipboard)"
+    return False, f"no clipboard tool found ({clipboard_install_hint()})"
 
 
 class LanCalcTUI:
@@ -100,6 +110,8 @@ class LanCalcTUI:
     """
 
     def __init__(self, initial_text: str = ""):
+        if not TUI_AVAILABLE:
+            raise RuntimeError("TUI not available - prompt_toolkit is not installed")
         self.result = {k: "" for k in FIELD_KEYS}
         self.status_text = f"LanCalc {VERSION}"
         self.status_class = "class:status"
