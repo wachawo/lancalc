@@ -71,10 +71,5 @@ include-package-data = true
 [tool.setuptools.package-data]
 lancalc = ["**/*.png", "**/*.ico", "**/*.icns", "**/*.ui", "resources/**"]
 
-[tool.pytest.ini_options]
-testpaths = ["test_lancalc.py"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = "-v --tb=short"
-qt_api = "pyqt5"
+# pytest configuration lives in pytest.ini (single source of truth).
+# When both files exist, pytest reads pytest.ini and ignores this section.

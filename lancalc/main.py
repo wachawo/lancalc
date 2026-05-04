@@ -31,11 +31,12 @@ except ImportError:
         from lancalc import gui
         from lancalc import tui
     except Exception as e:
-        logger.warning(f"{type(e).__name__} {str(e)}\n{traceback.format_exc()}")
-        VERSION = "0.0.0"
-        cli = None
-        gui = None
-        tui = None
+        # If even the absolute-path fallback fails, the lancalc package itself
+        # is broken (e.g. syntax error in a submodule). Re-raise so the real
+        # traceback surfaces — silently setting submodules to None would mask
+        # the root cause and crash later with a confusing AttributeError.
+        logger.error(f"{type(e).__name__} {str(e)}\n{traceback.format_exc()}")
+        raise
 
 logger.debug(f"LanCalc {VERSION} starting...")
 
@@ -55,15 +56,16 @@ def is_headless_environment() -> bool:
     if any(os.environ.get(var) == 'true' for var in ['CI', 'GITHUB_ACTIONS', 'TRAVIS']):
         return True
 
-    # Check for display environment variables
-    display_vars = ['DISPLAY', 'WAYLAND_DISPLAY', 'QT_QPA_PLATFORM']
-    for var in display_vars:
-        if os.environ.get(var):
-            return False
-
-    # Additional check for Qt platform
-    if os.environ.get('QT_QPA_PLATFORM') == 'offscreen':
+    # Explicit Qt headless signal: even if a display exists, the user has asked
+    # Qt to run offscreen — don't try to open a window.
+    if os.environ.get('QT_QPA_PLATFORM', '').strip().lower() == 'offscreen':
         return True
+
+    # Real display server signals (DISPLAY, WAYLAND_DISPLAY) → GUI is available.
+    # NOTE: QT_QPA_PLATFORM is intentionally NOT checked here — it picks Qt's
+    # plugin (xcb/wayland/windows/offscreen/etc.), not whether a display exists.
+    if os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY'):
+        return False
 
     # Platform-specific checks
     if sys.platform.startswith('linux'):

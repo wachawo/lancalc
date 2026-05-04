@@ -32,10 +32,8 @@ except ImportError:
         from lancalc import core
         from lancalc import adapters
     except Exception as e:
-        logger.warning(f"{type(e).__name__} {str(e)}\n{traceback.format_exc()}")
-        VERSION = "0.0.0"
-        core = None
-        adapters = None
+        logger.error(f"{type(e).__name__} {str(e)}\n{traceback.format_exc()}")
+        raise
 
 logger.debug(f"LanCalc {VERSION} starting...")
 

@@ -1336,6 +1336,41 @@ def test_tui_init_raises_when_unavailable(monkeypatch):
         tui_module.LanCalcTUI(initial_text="192.168.1.1/24")
 
 
+def test_main_headless_qt_offscreen_overrides_display(monkeypatch):
+    """QT_QPA_PLATFORM=offscreen → headless even if DISPLAY is set."""
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    monkeypatch.setenv("DISPLAY", ":0")
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.delenv("TRAVIS", raising=False)
+    assert main_module.is_headless_environment() is True
+
+
+def test_main_headless_display_set_means_not_headless(monkeypatch):
+    """Real display server signal (DISPLAY) → not headless."""
+    monkeypatch.setenv("DISPLAY", ":0")
+    monkeypatch.delenv("QT_QPA_PLATFORM", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.delenv("TRAVIS", raising=False)
+    assert main_module.is_headless_environment() is False
+
+
+def test_main_headless_qt_xcb_does_not_count_as_display(monkeypatch):
+    """QT_QPA_PLATFORM=xcb selects a Qt plugin but doesn't itself prove a display exists."""
+    monkeypatch.setenv("QT_QPA_PLATFORM", "xcb")
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.delenv("TRAVIS", raising=False)
+    monkeypatch.delenv("SSH_CONNECTION", raising=False)
+    # On Linux without DISPLAY, even with QT_QPA_PLATFORM=xcb, treat as headless.
+    if sys.platform.startswith("linux"):
+        assert main_module.is_headless_environment() is True
+
+
 def main():
     pass
 
