@@ -30,15 +30,24 @@ requires-python = ">=3.9"
 dependencies = [
     "netifaces>=0.11.0; platform_system == 'Linux'",
     "PyQt5>=5.15",
+    "prompt_toolkit>=3.0",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0.0", "pytest-qt>=4.0.0", "pre-commit", "flake8"]
 # For building standalone binaries
 dist = ["PyInstaller>=6.0.0"]
-# Non-GUI runtime deps (to use with two-step install to avoid PyQt5)
-nogui = [
+# Slim install: GUI only (no prompt_toolkit). Use with two-step --no-deps install:
+#   pip install --no-deps lancalc && pip install 'lancalc[gui]'
+gui = [
     "netifaces>=0.11.0; platform_system == 'Linux'",
+    "PyQt5>=5.15",
+]
+# Slim install: TUI only (no PyQt5). Use with two-step --no-deps install:
+#   pip install --no-deps lancalc && pip install 'lancalc[tui]'
+tui = [
+    "netifaces>=0.11.0; platform_system == 'Linux'",
+    "prompt_toolkit>=3.0",
 ]
 
 [project.scripts]
@@ -62,10 +71,5 @@ include-package-data = true
 [tool.setuptools.package-data]
 lancalc = ["**/*.png", "**/*.ico", "**/*.icns", "**/*.ui", "resources/**"]
 
-[tool.pytest.ini_options]
-testpaths = ["test_lancalc.py"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = "-v --tb=short"
-qt_api = "pyqt5"
+# pytest configuration lives in pytest.ini (single source of truth).
+# When both files exist, pytest reads pytest.ini and ignores this section.

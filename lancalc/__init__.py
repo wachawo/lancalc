@@ -8,7 +8,7 @@ A cross-platform tool for calculating IPv4 network parameters including
 network address, broadcast address, host range, and special IPv4 range detection.
 """
 
-__version__ = "0.1.11"
+__version__ = "0.1.12"
 __author__ = 'Aleksandr Pimenov'
 __email__ = 'wachawo@gmail.com'
 
@@ -16,6 +16,7 @@ __email__ = 'wachawo@gmail.com'
 from . import core
 from . import cli
 from . import gui
+from . import tui
 from . import main
 from . import adapters
 
@@ -33,6 +34,7 @@ __all__ = [
     "core",
     "cli",
     "gui",
+    "tui",
     "main",
     "adapters",
     "LanCalc",
